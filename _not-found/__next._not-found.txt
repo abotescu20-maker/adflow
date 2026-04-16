@@ -1,0 +1,5 @@
+1:"$Sreact.fragment"
+2:I[42081,["/adflow/_next/static/chunks/0.ejfu_n~6il6.js"],"default"]
+3:I[64200,["/adflow/_next/static/chunks/0.ejfu_n~6il6.js"],"default"]
+4:[]
+0:{"rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"isPartial":false,"staleTime":300,"varyParams":"$W4","buildId":"RnyQ2e0w-TVWxYOoQyruR"}
