@@ -3,14 +3,12 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import {
   doc,
-  getDoc,
   setDoc,
   collection,
   query,
   where,
   onSnapshot,
   serverTimestamp,
-  writeBatch,
   updateDoc,
   arrayUnion,
 } from "firebase/firestore";
@@ -118,7 +116,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const createWorkspace = async (name: string, brand?: string): Promise<string> => {
     if (!user) throw new Error("Not authenticated");
-    const batch = writeBatch(db);
+
+    // 1. Create workspace document first (rule only requires auth + ownerUid match)
     const workspaceRef = doc(collection(db, "workspaces"));
     const workspace: Omit<Workspace, "id" | "createdAt" | "updatedAt"> = {
       name,
@@ -129,15 +128,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       limits: DEFAULT_LIMITS.free,
       usage: { members: 1, campaigns: 0, storageBytes: 0, transcodingMinutesThisMonth: 0 },
     };
-    batch.set(workspaceRef, {
+    await setDoc(workspaceRef, {
       ...workspace,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
 
-    // Add creator as owner
+    // 2. Now workspace exists, so member creation rule can verify ownerUid via get()
     const memberRef = doc(db, "workspaces", workspaceRef.id, "members", user.uid);
-    batch.set(memberRef, {
+    await setDoc(memberRef, {
       uid: user.uid,
       email: user.email,
       displayName: user.displayName || user.email?.split("@")[0] || "User",
@@ -147,15 +146,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       addedBy: user.uid,
     });
 
-    // Add workspace to user's list
+    // 3. Add workspace to user's profile
     const userRef = doc(db, "users", user.uid);
-    batch.update(userRef, {
+    await updateDoc(userRef, {
       workspaces: arrayUnion(workspaceRef.id),
       defaultWorkspaceId: workspaceRef.id,
       lastActiveAt: serverTimestamp(),
     });
 
-    await batch.commit();
     setActiveWorkspaceId(workspaceRef.id);
     return workspaceRef.id;
   };

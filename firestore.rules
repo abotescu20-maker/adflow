@@ -24,15 +24,25 @@ service cloud.firestore {
     // Workspaces — members only
     match /workspaces/{workspaceId} {
       allow read: if isMember(workspaceId);
-      allow create: if request.auth != null;
+      // Create: authenticated user can create a workspace where they are the owner
+      allow create: if request.auth != null &&
+        request.resource.data.ownerUid == request.auth.uid;
       allow update: if hasAnyRole(workspaceId, ['owner', 'admin']);
       allow delete: if hasRole(workspaceId, 'owner');
 
       // Members subcollection
       match /members/{memberId} {
         allow read: if isMember(workspaceId);
-        allow write: if hasAnyRole(workspaceId, ['owner', 'admin']) ||
+        // Allow user to create themselves as owner during workspace creation
+        // (batch write: workspace doc has ownerUid == auth.uid, and member doc is for themselves with role owner)
+        allow create: if request.auth != null &&
+          request.auth.uid == memberId &&
+          request.resource.data.role == 'owner' &&
+          get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid == request.auth.uid;
+        // Admins and owners can add/update/delete other members
+        allow update, delete: if hasAnyRole(workspaceId, ['owner', 'admin']) ||
           (request.auth.uid == memberId && request.method == 'delete');
+        allow create: if hasAnyRole(workspaceId, ['owner', 'admin']);
       }
 
       // Campaigns — members can read, editor+ can write
