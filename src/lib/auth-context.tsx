@@ -11,7 +11,7 @@ import {
   signInWithPopup,
   updateProfile,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { UserProfile } from "@/lib/schema";
 
@@ -33,37 +33,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (fbUser) => {
-      setUser(fbUser);
-      if (fbUser) {
-        // Load or create user profile
-        const profileRef = doc(db, "users", fbUser.uid);
-        const snap = await getDoc(profileRef);
-        if (snap.exists()) {
-          setProfile(snap.data() as UserProfile);
-        } else {
-          // First-time profile creation
-          const newProfile: Omit<UserProfile, "createdAt" | "lastActiveAt"> = {
-            uid: fbUser.uid,
-            email: fbUser.email || "",
-            displayName: fbUser.displayName || fbUser.email?.split("@")[0] || "User",
-            photoURL: fbUser.photoURL || undefined,
-            workspaces: [],
-          };
-          await setDoc(profileRef, {
-            ...newProfile,
-            createdAt: serverTimestamp(),
-            lastActiveAt: serverTimestamp(),
-          });
-          const created = await getDoc(profileRef);
-          setProfile(created.data() as UserProfile);
-        }
-      } else {
-        setProfile(null);
+    let profileUnsub: (() => void) | null = null;
+
+    const authUnsub = onAuthStateChanged(auth, (fbUser) => {
+      // Clean up previous profile listener
+      if (profileUnsub) {
+        profileUnsub();
+        profileUnsub = null;
       }
-      setLoading(false);
+
+      setUser(fbUser);
+      if (!fbUser) {
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      const profileRef = doc(db, "users", fbUser.uid);
+
+      profileUnsub = onSnapshot(
+        profileRef,
+        async (snap) => {
+          if (snap.exists()) {
+            setProfile(snap.data() as UserProfile);
+            setLoading(false);
+          } else {
+            // First-time profile creation with merge
+            try {
+              await setDoc(
+                profileRef,
+                {
+                  uid: fbUser.uid,
+                  email: fbUser.email || "",
+                  displayName:
+                    fbUser.displayName || fbUser.email?.split("@")[0] || "User",
+                  photoURL: fbUser.photoURL || null,
+                  workspaces: [],
+                  createdAt: serverTimestamp(),
+                  lastActiveAt: serverTimestamp(),
+                },
+                { merge: true }
+              );
+              // Listener will fire again with the new doc
+            } catch (err) {
+              console.error("Failed to create user profile:", err);
+              setLoading(false);
+            }
+          }
+        },
+        (err) => {
+          console.error("Profile subscription error:", err);
+          setLoading(false);
+        }
+      );
     });
-    return () => unsub();
+
+    return () => {
+      authUnsub();
+      if (profileUnsub) profileUnsub();
+    };
   }, []);
 
   const signUp = async (email: string, password: string, displayName: string) => {
