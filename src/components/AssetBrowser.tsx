@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import StatusBadge from "@/components/StatusBadge";
+import UploadDialog from "@/components/UploadDialog";
 import {
   Film,
   Image as ImageIcon,
@@ -87,11 +88,19 @@ export default function AssetBrowser({
   const { campaign } = useCampaign(workspaceId, campaignId);
   const { assets, loading } = useAssets(workspaceId, campaignId, selectedFolder);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const currentFolder = FOLDERS.find((f) => f.id === selectedFolder);
 
   return (
     <div className="h-full flex flex-col bg-subtle/50">
+      <UploadDialog
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        workspaceId={workspaceId}
+        campaignId={campaignId}
+        folder={selectedFolder || "all"}
+      />
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-border">
         <div className="px-8 py-4 flex items-center justify-between">
@@ -135,9 +144,8 @@ export default function AssetBrowser({
               Filter
             </button>
             <button
-              disabled
-              title="Upload — coming next"
-              className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors shadow-sm shadow-accent/20 disabled:opacity-50"
+              onClick={() => setUploadOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors shadow-sm shadow-accent/20"
             >
               <Upload className="w-3.5 h-3.5" />
               Upload
@@ -184,9 +192,8 @@ export default function AssetBrowser({
               Upload footage, graphics, audio and editing drafts to start collaborating with your team and clients.
             </p>
             <button
-              disabled
-              title="Upload — coming next"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors shadow-sm shadow-accent/20 disabled:opacity-50"
+              onClick={() => setUploadOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors shadow-sm shadow-accent/20"
             >
               <Upload className="w-4 h-4" />
               Upload files

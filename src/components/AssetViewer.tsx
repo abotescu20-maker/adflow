@@ -25,6 +25,7 @@ import {
   CheckCircle,
   XCircle,
   Film,
+  Music,
   Loader2,
 } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
@@ -94,6 +95,7 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
     assetId
   );
 
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -110,9 +112,11 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
     if (!user || !profile || !asset || !commentText.trim()) return;
     setSendingComment(true);
     try {
+      const videoDuration = videoEl?.duration || duration;
+      const videoTime = videoEl?.currentTime ?? currentTime;
       await createComment(workspaceId, campaignId, assetId, {
         text: commentText.trim(),
-        timecode: duration > 0 ? currentTime : undefined,
+        timecode: videoDuration > 0 ? videoTime : undefined,
         visibility: commentVisibility,
         authorId: user.uid,
         authorName: profile.displayName,
@@ -198,30 +202,54 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
       <div className="flex-1 flex overflow-hidden">
         {/* Video player area */}
         <div className="flex-1 flex flex-col">
-          <div className="flex-1 bg-slate-900 relative flex items-center justify-center">
-            <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center">
-              <div className="text-center">
-                <Film className="w-16 h-16 text-slate-600 mx-auto mb-3" />
-                <p className="text-slate-400 text-sm font-medium">{asset.name}</p>
-                <p className="text-slate-500 text-xs mt-1">
-                  {asset.width && asset.height ? `${asset.width}×${asset.height}` : "—"}
-                  {asset.format && ` · ${asset.format}`}
-                </p>
-                <p className="text-slate-600 text-[11px] mt-3">
-                  Playback pending — upload + transcoding pipeline coming next
-                </p>
+          <div className="flex-1 bg-slate-900 relative flex items-center justify-center overflow-hidden">
+            {asset.type === "video" && asset.storagePath ? (
+              <video
+                ref={setVideoEl}
+                src={asset.storagePath}
+                className="max-w-full max-h-full"
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onTimeUpdate={(e) => {
+                  const t = e.currentTarget.currentTime;
+                  setCurrentTime(t);
+                  if (e.currentTarget.duration > 0) setProgress((t / e.currentTarget.duration) * 100);
+                }}
+                controls={false}
+                playsInline
+              />
+            ) : asset.type === "image" && asset.storagePath ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={asset.storagePath} alt={asset.name} className="max-w-full max-h-full object-contain" />
+            ) : asset.type === "audio" && asset.storagePath ? (
+              <div className="flex flex-col items-center gap-4">
+                <Music className="w-20 h-20 text-slate-500" />
+                <p className="text-slate-400 text-sm">{asset.name}</p>
+                <audio src={asset.storagePath} controls className="w-80" />
               </div>
-            </div>
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center">
+                <div className="text-center">
+                  <Film className="w-16 h-16 text-slate-600 mx-auto mb-3" />
+                  <p className="text-slate-400 text-sm font-medium">{asset.name}</p>
+                  <p className="text-slate-500 text-xs mt-1">
+                    {asset.width && asset.height ? `${asset.width}×${asset.height}` : "—"}
+                    {asset.format && ` · ${asset.format}`}
+                  </p>
+                </div>
+              </div>
+            )}
 
-            <button
-              onClick={() => setIsPlaying(!isPlaying)}
-              disabled
-              className="relative z-10 w-16 h-16 rounded-full bg-white/15 flex items-center justify-center hover:bg-white/25 transition-colors backdrop-blur-md border border-white/20 opacity-60"
-            >
-              {isPlaying ? <Pause className="w-7 h-7 text-white" /> : <Play className="w-7 h-7 text-white ml-1" />}
-            </button>
+            {asset.type === "video" && asset.storagePath && !isPlaying && (
+              <button
+                onClick={() => videoEl?.play()}
+                className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors backdrop-blur-md border border-white/30"
+              >
+                <Play className="w-7 h-7 text-white ml-1" />
+              </button>
+            )}
 
-            <div className="absolute top-4 left-4 px-2.5 py-1 rounded-lg bg-accent text-white text-xs font-bold shadow-lg">V{asset.version}</div>
+            <div className="absolute top-4 left-4 px-2.5 py-1 rounded-lg bg-accent text-white text-xs font-bold shadow-lg z-20">V{asset.version}</div>
 
             {/* Approval buttons */}
             <div className="absolute top-4 right-4 flex gap-2">
@@ -251,8 +279,13 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-                setProgress(pct);
-                if (duration > 0) setCurrentTime((pct / 100) * duration);
+                const d = videoEl?.duration || duration;
+                if (videoEl && d > 0) {
+                  videoEl.currentTime = (pct / 100) * d;
+                } else {
+                  setProgress(pct);
+                  if (d > 0) setCurrentTime((pct / 100) * d);
+                }
               }}
             >
               <div className="timeline-progress" style={{ width: `${progress}%` }} />
@@ -261,14 +294,18 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
             {/* Comment markers */}
             <div className="relative h-3 mb-2">
               {comments.map((comment) => {
-                if (!comment.timecode || duration === 0) return null;
-                const pos = (comment.timecode / duration) * 100;
+                const d = videoEl?.duration || duration;
+                if (typeof comment.timecode !== "number" || d === 0) return null;
+                const pos = (comment.timecode / d) * 100;
                 return (
                   <button
                     key={comment.id}
                     onClick={() => {
-                      setCurrentTime(comment.timecode!);
-                      setProgress((comment.timecode! / duration) * 100);
+                      if (videoEl) videoEl.currentTime = comment.timecode!;
+                      else {
+                        setCurrentTime(comment.timecode!);
+                        setProgress((comment.timecode! / d) * 100);
+                      }
                     }}
                     className="absolute top-0 w-3 h-3 rounded-full bg-accent/50 hover:bg-accent cursor-pointer transition-all hover:scale-125 -translate-x-1/2 border-2 border-white shadow-sm"
                     style={{ left: `${pos}%` }}
@@ -280,25 +317,52 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <button disabled className="p-1 text-muted opacity-50"><SkipBack className="w-4 h-4" /></button>
                 <button
-                  disabled
-                  className="p-1.5 rounded-full bg-accent text-white shadow-sm opacity-60"
+                  onClick={() => videoEl && (videoEl.currentTime = Math.max(0, videoEl.currentTime - 5))}
+                  disabled={!videoEl}
+                  className="p-1 text-muted hover:text-foreground transition-colors disabled:opacity-40"
+                >
+                  <SkipBack className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    if (!videoEl) return;
+                    if (videoEl.paused) videoEl.play();
+                    else videoEl.pause();
+                  }}
+                  disabled={!videoEl}
+                  className="p-1.5 rounded-full bg-accent text-white shadow-sm hover:bg-accent-hover transition-colors disabled:opacity-40"
                 >
                   {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                 </button>
-                <button disabled className="p-1 text-muted opacity-50"><SkipForward className="w-4 h-4" /></button>
+                <button
+                  onClick={() => videoEl && (videoEl.currentTime = Math.min(videoEl.duration, videoEl.currentTime + 5))}
+                  disabled={!videoEl}
+                  className="p-1 text-muted hover:text-foreground transition-colors disabled:opacity-40"
+                >
+                  <SkipForward className="w-4 h-4" />
+                </button>
                 <span className="text-xs text-muted font-medium ml-1">1.0x</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-sm font-semibold text-accent">{currentTimecode}</span>
                 <span className="text-xs text-slate-300">/</span>
-                <span className="font-mono text-sm text-muted">{formatTimecode(duration)}</span>
+                <span className="font-mono text-sm text-muted">{formatTimecode(videoEl?.duration || duration)}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <button className="p-1.5 text-muted hover:text-foreground hover:bg-slate-100 rounded-lg transition-colors" disabled><Pencil className="w-4 h-4" /></button>
-                <button className="p-1.5 text-muted hover:text-foreground hover:bg-slate-100 rounded-lg transition-colors" disabled><Volume2 className="w-4 h-4" /></button>
-                <button className="p-1.5 text-muted hover:text-foreground hover:bg-slate-100 rounded-lg transition-colors" disabled><Maximize2 className="w-4 h-4" /></button>
+                <button className="p-1.5 text-muted hover:text-foreground hover:bg-slate-100 rounded-lg transition-colors"><Pencil className="w-4 h-4" /></button>
+                <button
+                  onClick={() => videoEl && (videoEl.muted = !videoEl.muted)}
+                  className="p-1.5 text-muted hover:text-foreground hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <Volume2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => videoEl?.requestFullscreen()}
+                  className="p-1.5 text-muted hover:text-foreground hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
           </div>
@@ -340,8 +404,11 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                       canResolve={!!user}
                       onResolve={() => handleResolve(comment)}
                       onSeek={(t) => {
-                        setCurrentTime(t);
-                        if (duration > 0) setProgress((t / duration) * 100);
+                        if (videoEl) videoEl.currentTime = t;
+                        else {
+                          setCurrentTime(t);
+                          if (duration > 0) setProgress((t / duration) * 100);
+                        }
                       }}
                     />
                   ))
