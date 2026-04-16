@@ -1,6 +1,12 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getAuth, Auth } from "firebase/auth";
-import { getFirestore, Firestore } from "firebase/firestore";
+import {
+  initializeFirestore,
+  getFirestore,
+  Firestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
 import { getStorage, FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -12,9 +18,21 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-export const firebaseApp: FirebaseApp =
-  getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+const isNewApp = getApps().length === 0;
+export const firebaseApp: FirebaseApp = isNewApp ? initializeApp(firebaseConfig) : getApp();
 
 export const auth: Auth = getAuth(firebaseApp);
-export const db: Firestore = getFirestore(firebaseApp);
+
+// Use auto-detect long polling to avoid WebChannel issues on some networks
+// (fixes "client is offline" errors on regional Firestore instances)
+export const db: Firestore = isNewApp
+  ? initializeFirestore(firebaseApp, {
+      experimentalAutoDetectLongPolling: true,
+      localCache:
+        typeof window !== "undefined"
+          ? persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+          : undefined,
+    })
+  : getFirestore(firebaseApp);
+
 export const storage: FirebaseStorage = getStorage(firebaseApp);
