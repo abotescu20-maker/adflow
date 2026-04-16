@@ -8,7 +8,6 @@ import CampaignDashboard from "@/components/CampaignDashboard";
 import AssetBrowser from "@/components/AssetBrowser";
 import AssetViewer from "@/components/AssetViewer";
 import DeliverablesMatrix from "@/components/DeliverablesMatrix";
-import { Asset } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
 
@@ -20,7 +19,8 @@ export default function Home() {
   const router = useRouter();
 
   const [view, setView] = useState<View>("dashboard");
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,14 +34,30 @@ export default function Home() {
     }
   }, [user, authLoading, workspaces, wsLoading, router]);
 
-  const handleAssetOpen = (asset: Asset) => {
-    setSelectedAsset(asset);
+  const handleOpenCampaign = (campaignId: string) => {
+    setSelectedCampaignId(campaignId);
+    setSelectedFolder(null);
+    setSelectedAssetId(null);
+    setView("assets");
+  };
+
+  const handleOpenAsset = (assetId: string) => {
+    setSelectedAssetId(assetId);
     setView("viewer");
   };
 
   const handleBackFromViewer = () => {
+    setSelectedAssetId(null);
     setView("assets");
-    setSelectedAsset(null);
+  };
+
+  const handleNavigate = (newView: View) => {
+    if (newView === "dashboard") {
+      setSelectedCampaignId(null);
+      setSelectedAssetId(null);
+      setSelectedFolder(null);
+    }
+    setView(newView);
   };
 
   if (authLoading || wsLoading || !user || !activeWorkspace) {
@@ -56,32 +72,51 @@ export default function Home() {
     <div className="flex h-screen overflow-hidden">
       <Sidebar
         currentView={view}
-        onNavigate={setView}
+        onNavigate={handleNavigate}
         selectedFolder={selectedFolder}
         onFolderSelect={(folderId) => {
           setSelectedFolder(folderId);
-          setView("assets");
+          if (view !== "assets") setView("assets");
         }}
       />
 
       <main className="flex-1 overflow-hidden">
         {view === "dashboard" && (
-          <CampaignDashboard
-            onOpenCampaign={() => {
-              setSelectedFolder(null);
-              setView("assets");
+          <CampaignDashboard onOpenCampaign={handleOpenCampaign} />
+        )}
+        {view === "assets" && selectedCampaignId && (
+          <AssetBrowser
+            workspaceId={activeWorkspace.id}
+            campaignId={selectedCampaignId}
+            selectedFolder={selectedFolder}
+            onAssetOpen={handleOpenAsset}
+            onFolderSelect={setSelectedFolder}
+            onBack={() => {
+              setSelectedCampaignId(null);
+              setView("dashboard");
             }}
           />
         )}
-        {view === "assets" && (
-          <AssetBrowser
-            selectedFolder={selectedFolder}
-            onAssetOpen={handleAssetOpen}
-            onFolderSelect={setSelectedFolder}
-          />
+        {view === "assets" && !selectedCampaignId && (
+          <div className="h-full flex items-center justify-center bg-subtle/30">
+            <div className="text-center">
+              <p className="text-sm text-muted mb-3">Select a campaign to view assets</p>
+              <button
+                onClick={() => setView("dashboard")}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors shadow-sm shadow-accent/20"
+              >
+                Back to campaigns
+              </button>
+            </div>
+          </div>
         )}
-        {view === "viewer" && selectedAsset && (
-          <AssetViewer asset={selectedAsset} onBack={handleBackFromViewer} />
+        {view === "viewer" && selectedCampaignId && selectedAssetId && (
+          <AssetViewer
+            workspaceId={activeWorkspace.id}
+            campaignId={selectedCampaignId}
+            assetId={selectedAssetId}
+            onBack={handleBackFromViewer}
+          />
         )}
         {view === "deliverables" && <DeliverablesMatrix />}
       </main>

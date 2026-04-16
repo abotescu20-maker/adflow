@@ -173,6 +173,8 @@ export interface Asset {
 // ============================================================================
 // COMMENT
 // ============================================================================
+export type CommentVisibility = "public" | "team";
+
 export interface Comment {
   id: string;
   workspaceId: string;
@@ -183,7 +185,7 @@ export interface Comment {
   authorAvatar?: string;
   text: string;
   timecode?: number; // seconds into video, null for general comments
-  visibility: "public" | "team"; // public = visible to clients via share links
+  visibility: CommentVisibility; // public = visible to clients via share links
   resolved: boolean;
   resolvedBy?: string;
   resolvedAt?: Timestamp;
