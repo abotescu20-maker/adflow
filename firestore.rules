@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper: is user a member of workspace with given role
+    function isMember(workspaceId) {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
+    }
+    function hasRole(workspaceId, role) {
+      return isMember(workspaceId) &&
+        get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.role == role;
+    }
+    function hasAnyRole(workspaceId, roles) {
+      return isMember(workspaceId) &&
+        get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.role in roles;
+    }
+
+    // User profiles — only owner can read/write
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Workspaces — members only
+    match /workspaces/{workspaceId} {
+      allow read: if isMember(workspaceId);
+      allow create: if request.auth != null;
+      allow update: if hasAnyRole(workspaceId, ['owner', 'admin']);
+      allow delete: if hasRole(workspaceId, 'owner');
+
+      // Members subcollection
+      match /members/{memberId} {
+        allow read: if isMember(workspaceId);
+        allow write: if hasAnyRole(workspaceId, ['owner', 'admin']) ||
+          (request.auth.uid == memberId && request.method == 'delete');
+      }
+
+      // Campaigns — members can read, editor+ can write
+      match /campaigns/{campaignId} {
+        allow read: if isMember(workspaceId);
+        allow create, update: if hasAnyRole(workspaceId, ['owner', 'admin', 'editor']);
+        allow delete: if hasAnyRole(workspaceId, ['owner', 'admin']);
+
+        // Assets under campaigns
+        match /assets/{assetId} {
+          allow read: if isMember(workspaceId);
+          allow write: if hasAnyRole(workspaceId, ['owner', 'admin', 'editor']);
+
+          // Comments on assets
+          match /comments/{commentId} {
+            allow read: if isMember(workspaceId);
+            allow create: if isMember(workspaceId);
+            allow update, delete: if request.auth != null &&
+              resource.data.authorId == request.auth.uid;
+          }
+        }
+
+        // Deliverables matrix
+        match /deliverables/{deliverableId} {
+          allow read: if isMember(workspaceId);
+          allow write: if hasAnyRole(workspaceId, ['owner', 'admin', 'editor']);
+        }
+      }
+
+      // Share Links — workspace members can manage
+      match /shareLinks/{linkId} {
+        allow read: if isMember(workspaceId);
+        allow write: if hasAnyRole(workspaceId, ['owner', 'admin', 'editor']);
+      }
+    }
+
+    // Public share link access (read-only, token-based, handled via Cloud Functions)
+    match /publicShares/{token} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

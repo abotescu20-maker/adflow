@@ -16,8 +16,13 @@ import {
   Upload,
   Settings,
   Zap,
+  LogOut,
+  ChevronDown,
 } from "lucide-react";
+import { useState } from "react";
 import { folders } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth-context";
+import { useWorkspace } from "@/lib/workspace-context";
 
 const iconMap: Record<string, React.ElementType> = {
   film: Film,
@@ -41,17 +46,72 @@ export default function Sidebar({
   selectedFolder,
   onFolderSelect,
 }: SidebarProps) {
+  const { profile, signOut } = useAuth();
+  const { activeWorkspace, workspaces, setActiveWorkspaceId, currentRole } = useWorkspace();
+  const [wsMenuOpen, setWsMenuOpen] = useState(false);
+
+  const initials = (profile?.displayName || "?")
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   return (
     <aside className="w-[240px] bg-sidebar-bg border-r border-border flex flex-col h-full shrink-0">
-      {/* Logo */}
-      <div className="px-5 py-4 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-sm">
-          <Zap className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-[15px] font-bold tracking-tight text-foreground">AdFlow</h1>
-          <p className="text-[11px] text-muted font-medium">Post-Production</p>
-        </div>
+      {/* Logo + workspace switcher */}
+      <div className="px-3 pt-3 pb-2 relative">
+        <button
+          onClick={() => setWsMenuOpen((o) => !o)}
+          className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white transition-colors"
+        >
+          <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-sm shrink-0">
+            <Zap className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0 text-left">
+            <h1 className="text-[13px] font-bold tracking-tight text-foreground truncate">
+              {activeWorkspace?.name || "AdFlow"}
+            </h1>
+            <p className="text-[11px] text-muted font-medium truncate">
+              {currentRole ? currentRole.charAt(0).toUpperCase() + currentRole.slice(1) : "Post-Production"}
+            </p>
+          </div>
+          <ChevronDown className={`w-3.5 h-3.5 text-muted transition-transform ${wsMenuOpen ? "rotate-180" : ""}`} />
+        </button>
+
+        {wsMenuOpen && (
+          <div className="absolute left-3 right-3 top-full mt-1 bg-white rounded-lg border border-border shadow-lg z-20 overflow-hidden">
+            {workspaces.map((ws) => (
+              <button
+                key={ws.id}
+                onClick={() => {
+                  setActiveWorkspaceId(ws.id);
+                  setWsMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-slate-50 transition-colors ${
+                  ws.id === activeWorkspace?.id ? "bg-accent-light text-accent font-medium" : "text-foreground"
+                }`}
+              >
+                <div className="w-6 h-6 rounded-md bg-accent-light flex items-center justify-center text-[10px] font-bold text-accent shrink-0">
+                  {ws.name[0]?.toUpperCase()}
+                </div>
+                <span className="truncate">{ws.name}</span>
+              </button>
+            ))}
+            <div className="border-t border-border py-1">
+              <button
+                onClick={() => {
+                  setWsMenuOpen(false);
+                  signOut();
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-[13px] text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Sign out
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Search bar */}
@@ -131,18 +191,21 @@ export default function Sidebar({
       {/* Quick actions + User */}
       <div className="px-3 py-3 border-t border-border">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent to-violet-500 flex items-center justify-center text-white text-xs font-bold shadow-sm">
-            AB
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent to-violet-500 flex items-center justify-center text-white text-xs font-bold shadow-sm shrink-0">
+            {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-foreground truncate">Andrei B.</p>
-            <p className="text-[11px] text-muted">Admin</p>
+            <p className="text-[13px] font-semibold text-foreground truncate">
+              {profile?.displayName || "User"}
+            </p>
+            <p className="text-[11px] text-muted truncate">{profile?.email}</p>
           </div>
-          <button className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-white transition-colors">
-            <Bell className="w-4 h-4" />
-          </button>
-          <button className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-white transition-colors">
-            <Settings className="w-4 h-4" />
+          <button
+            onClick={signOut}
+            title="Sign out"
+            className="p-1.5 rounded-lg text-muted hover:text-red-500 hover:bg-white transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
           </button>
         </div>
       </div>
