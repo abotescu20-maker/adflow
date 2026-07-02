@@ -3,15 +3,19 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { type View } from "@/components/Sidebar";
 import CampaignDashboard from "@/components/CampaignDashboard";
 import AssetBrowser from "@/components/AssetBrowser";
 import AssetViewer from "@/components/AssetViewer";
 import DeliverablesMatrix from "@/components/DeliverablesMatrix";
+import CollectionsView from "@/components/CollectionsView";
+import ActivityView from "@/components/ActivityView";
+import TeamView from "@/components/TeamView";
+import ShareLinksView from "@/components/ShareLinksView";
+import NotificationsBell from "@/components/NotificationsBell";
+import GlobalSearch from "@/components/GlobalSearch";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
-
-type View = "dashboard" | "assets" | "viewer" | "deliverables";
 
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
@@ -22,6 +26,7 @@ export default function Home() {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -34,6 +39,19 @@ export default function Home() {
     }
   }, [user, authLoading, workspaces, wsLoading, router]);
 
+  // ⌘K / Ctrl+K global search shortcut
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((o) => !o);
+      }
+      if (e.key === "Escape") setSearchOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const handleOpenCampaign = (campaignId: string) => {
     setSelectedCampaignId(campaignId);
     setSelectedFolder(null);
@@ -42,6 +60,12 @@ export default function Home() {
   };
 
   const handleOpenAsset = (assetId: string) => {
+    setSelectedAssetId(assetId);
+    setView("viewer");
+  };
+
+  const handleOpenAssetCross = (campaignId: string, assetId: string) => {
+    setSelectedCampaignId(campaignId);
     setSelectedAssetId(assetId);
     setView("viewer");
   };
@@ -78,48 +102,67 @@ export default function Home() {
           setSelectedFolder(folderId);
           if (view !== "assets") setView("assets");
         }}
+        onOpenSearch={() => setSearchOpen(true)}
       />
 
-      <main className="flex-1 overflow-hidden">
-        {view === "dashboard" && (
-          <CampaignDashboard onOpenCampaign={handleOpenCampaign} />
-        )}
-        {view === "assets" && selectedCampaignId && (
-          <AssetBrowser
-            workspaceId={activeWorkspace.id}
-            campaignId={selectedCampaignId}
-            selectedFolder={selectedFolder}
-            onAssetOpen={handleOpenAsset}
-            onFolderSelect={setSelectedFolder}
-            onBack={() => {
-              setSelectedCampaignId(null);
-              setView("dashboard");
-            }}
-          />
-        )}
-        {view === "assets" && !selectedCampaignId && (
-          <div className="h-full flex items-center justify-center bg-subtle/30">
-            <div className="text-center">
-              <p className="text-sm text-muted mb-3">Select a campaign to view assets</p>
-              <button
-                onClick={() => setView("dashboard")}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors shadow-sm shadow-accent/20"
-              >
-                Back to campaigns
-              </button>
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Top bar with notifications */}
+        <div className="absolute top-3 right-4 z-20">
+          <NotificationsBell />
+        </div>
+
+        <div className="flex-1 overflow-hidden">
+          {view === "dashboard" && (
+            <CampaignDashboard onOpenCampaign={handleOpenCampaign} />
+          )}
+          {view === "assets" && selectedCampaignId && (
+            <AssetBrowser
+              workspaceId={activeWorkspace.id}
+              campaignId={selectedCampaignId}
+              selectedFolder={selectedFolder}
+              onAssetOpen={handleOpenAsset}
+              onFolderSelect={setSelectedFolder}
+              onBack={() => {
+                setSelectedCampaignId(null);
+                setView("dashboard");
+              }}
+            />
+          )}
+          {view === "assets" && !selectedCampaignId && (
+            <div className="h-full flex items-center justify-center bg-subtle/30">
+              <div className="text-center">
+                <p className="text-sm text-muted mb-3">Select a campaign to view assets</p>
+                <button
+                  onClick={() => setView("dashboard")}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors shadow-sm shadow-accent/20"
+                >
+                  Back to campaigns
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-        {view === "viewer" && selectedCampaignId && selectedAssetId && (
-          <AssetViewer
-            workspaceId={activeWorkspace.id}
-            campaignId={selectedCampaignId}
-            assetId={selectedAssetId}
-            onBack={handleBackFromViewer}
-          />
-        )}
-        {view === "deliverables" && <DeliverablesMatrix />}
+          )}
+          {view === "viewer" && selectedCampaignId && selectedAssetId && (
+            <AssetViewer
+              workspaceId={activeWorkspace.id}
+              campaignId={selectedCampaignId}
+              assetId={selectedAssetId}
+              onBack={handleBackFromViewer}
+            />
+          )}
+          {view === "deliverables" && <DeliverablesMatrix />}
+          {view === "collections" && <CollectionsView />}
+          {view === "activity" && <ActivityView />}
+          {view === "team" && <TeamView />}
+          {view === "shareLinks" && <ShareLinksView />}
+        </div>
       </main>
+
+      <GlobalSearch
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onOpenCampaign={handleOpenCampaign}
+        onOpenAsset={handleOpenAssetCross}
+      />
     </div>
   );
 }

@@ -143,9 +143,11 @@ export interface Asset {
   folder: string; // "footage" | "graphics" | "sound" | "edits" | "final" | "briefs"
   status: ApprovalStatus;
   processingStatus: AssetProcessingStatus;
-  version: number;
+  version: number; // current version number
+  versionCount: number; // total number of versions uploaded
+  parentAssetId?: string; // if this is a version of another asset
   // Storage
-  storagePath: string; // gs:// path
+  storagePath: string; // gs:// path or blob URL
   originalFileName: string;
   sizeBytes: number;
   mimeType: string;
@@ -158,6 +160,16 @@ export interface Asset {
   thumbnailURL?: string;
   hlsManifestURL?: string; // for video streaming
   previewURL?: string; // watermarked review version
+  downloadURL?: string; // public direct download URL (blob)
+  // Enterprise metadata
+  tags: string[];
+  rating?: number; // 0-5 stars
+  assignedTo?: string; // member UID
+  assignedToName?: string;
+  assignedToAvatar?: string;
+  deadline?: Timestamp;
+  priority?: "low" | "normal" | "high" | "urgent";
+  customFields?: Record<string, string>;
   // Tracking
   uploadedBy: string;
   uploadedByName: string;
@@ -168,6 +180,165 @@ export interface Asset {
   // Approval tracking
   approvedBy?: string;
   approvedAt?: Timestamp;
+}
+
+// Sub-collection: /assets/{assetId}/versions/{versionId}
+export interface AssetVersion {
+  id: string;
+  assetId: string;
+  workspaceId: string;
+  campaignId: string;
+  version: number;
+  storagePath: string;
+  downloadURL?: string;
+  originalFileName: string;
+  sizeBytes: number;
+  mimeType: string;
+  thumbnailURL?: string;
+  durationSeconds?: number;
+  width?: number;
+  height?: number;
+  notes?: string; // changelog for this version
+  uploadedBy: string;
+  uploadedByName: string;
+  createdAt: Timestamp;
+}
+
+// ============================================================================
+// COLLECTION (saved smart filter / group)
+// ============================================================================
+export interface Collection {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  icon: string; // emoji or lucide name
+  color?: string; // hex
+  filters: {
+    status?: ApprovalStatus[];
+    folder?: string[];
+    tags?: string[];
+    assignedTo?: string[];
+    campaignIds?: string[];
+    deadlineBefore?: Timestamp;
+    rating?: number; // min rating
+    type?: AssetType[];
+  };
+  pinned: boolean;
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ============================================================================
+// REVIEW ROUND
+// ============================================================================
+export type ReviewRoundStatus = "open" | "completed" | "canceled";
+
+export interface ReviewRound {
+  id: string;
+  workspaceId: string;
+  campaignId: string;
+  assetId: string;
+  version: number; // which version of the asset is under review
+  roundNumber: number; // 1, 2, 3, ...
+  status: ReviewRoundStatus;
+  title: string; // "Client Round 1", "Internal QA"
+  reviewers: string[]; // UIDs expected to review
+  reviewerEmails?: string[]; // external reviewers (no account)
+  deadline?: Timestamp;
+  approvals: Record<string, { approvedAt: Timestamp; note?: string }>; // uid -> approval
+  rejections: Record<string, { rejectedAt: Timestamp; reason: string }>;
+  commentsCount: number;
+  shareLinkId?: string; // if a share link was created for this round
+  createdBy: string;
+  createdAt: Timestamp;
+  completedAt?: Timestamp;
+}
+
+// ============================================================================
+// ACTIVITY LOG (audit trail + feed)
+// ============================================================================
+export type ActivityAction =
+  | "workspace.created"
+  | "member.invited"
+  | "member.joined"
+  | "member.removed"
+  | "member.role_changed"
+  | "campaign.created"
+  | "campaign.updated"
+  | "campaign.status_changed"
+  | "campaign.deleted"
+  | "asset.uploaded"
+  | "asset.version_uploaded"
+  | "asset.status_changed"
+  | "asset.approved"
+  | "asset.rejected"
+  | "asset.assigned"
+  | "asset.deleted"
+  | "comment.posted"
+  | "comment.resolved"
+  | "comment.mentioned"
+  | "review.round_opened"
+  | "review.round_completed"
+  | "review.approval_given"
+  | "review.changes_requested"
+  | "share_link.created"
+  | "share_link.revoked"
+  | "share_link.viewed"
+  | "deliverable.rendered"
+  | "deliverable.delivered"
+  | "collection.created";
+
+export interface ActivityEntry {
+  id: string;
+  workspaceId: string;
+  actorId: string;
+  actorName: string;
+  actorAvatar?: string;
+  action: ActivityAction;
+  // Target (what was acted on)
+  targetType: "workspace" | "campaign" | "asset" | "comment" | "member" | "review" | "share_link" | "deliverable" | "collection";
+  targetId: string;
+  targetName: string;
+  // Context
+  campaignId?: string;
+  campaignName?: string;
+  assetId?: string;
+  assetName?: string;
+  // Extra payload
+  metadata?: Record<string, string | number | boolean | null>;
+  createdAt: Timestamp;
+}
+
+// ============================================================================
+// NOTIFICATION (per-user inbox)
+// ============================================================================
+export type NotificationKind =
+  | "mention"
+  | "assigned"
+  | "review_requested"
+  | "approval_granted"
+  | "changes_requested"
+  | "comment_reply"
+  | "deadline_approaching"
+  | "share_link_viewed"
+  | "invitation";
+
+export interface Notification {
+  id: string;
+  uid: string; // recipient
+  workspaceId: string;
+  kind: NotificationKind;
+  title: string;
+  body: string;
+  actorId?: string;
+  actorName?: string;
+  targetUrl: string; // where clicking takes you
+  read: boolean;
+  readAt?: Timestamp;
+  createdAt: Timestamp;
 }
 
 // ============================================================================

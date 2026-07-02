@@ -12,17 +12,26 @@ import {
   Grid3X3,
   Share2,
   Search,
-  Bell,
-  Upload,
-  Settings,
   Zap,
   LogOut,
   ChevronDown,
+  FolderKanban,
+  Activity,
+  Users,
 } from "lucide-react";
 import { useState } from "react";
-import { folders } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
+import { useFolderCounts } from "@/hooks/useFolderCounts";
+
+const FOLDERS = [
+  { id: "footage", name: "Raw Footage", icon: "film" },
+  { id: "graphics", name: "Graphics", icon: "image" },
+  { id: "sound", name: "Sound & Music", icon: "music" },
+  { id: "edits", name: "Edits", icon: "scissors" },
+  { id: "final", name: "Final Renders", icon: "check-circle" },
+  { id: "briefs", name: "Client Briefs", icon: "file-text" },
+] as const;
 
 const iconMap: Record<string, React.ElementType> = {
   film: Film,
@@ -33,11 +42,22 @@ const iconMap: Record<string, React.ElementType> = {
   "file-text": FileText,
 };
 
+export type View =
+  | "dashboard"
+  | "assets"
+  | "viewer"
+  | "deliverables"
+  | "collections"
+  | "activity"
+  | "team"
+  | "shareLinks";
+
 interface SidebarProps {
   currentView: string;
-  onNavigate: (view: "dashboard" | "assets" | "viewer" | "deliverables") => void;
+  onNavigate: (view: View) => void;
   selectedFolder: string | null;
   onFolderSelect: (folderId: string | null) => void;
+  onOpenSearch?: () => void;
 }
 
 export default function Sidebar({
@@ -45,10 +65,12 @@ export default function Sidebar({
   onNavigate,
   selectedFolder,
   onFolderSelect,
+  onOpenSearch,
 }: SidebarProps) {
   const { profile, signOut } = useAuth();
   const { activeWorkspace, workspaces, setActiveWorkspaceId, currentRole } = useWorkspace();
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
+  const folderCounts = useFolderCounts(activeWorkspace?.id ?? null);
 
   const initials = (profile?.displayName || "?")
     .split(" ")
@@ -76,7 +98,11 @@ export default function Sidebar({
               {currentRole ? currentRole.charAt(0).toUpperCase() + currentRole.slice(1) : "Post-Production"}
             </p>
           </div>
-          <ChevronDown className={`w-3.5 h-3.5 text-muted transition-transform ${wsMenuOpen ? "rotate-180" : ""}`} />
+          <ChevronDown
+            className={`w-3.5 h-3.5 text-muted transition-transform ${
+              wsMenuOpen ? "rotate-180" : ""
+            }`}
+          />
         </button>
 
         {wsMenuOpen && (
@@ -89,7 +115,9 @@ export default function Sidebar({
                   setWsMenuOpen(false);
                 }}
                 className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-slate-50 transition-colors ${
-                  ws.id === activeWorkspace?.id ? "bg-accent-light text-accent font-medium" : "text-foreground"
+                  ws.id === activeWorkspace?.id
+                    ? "bg-accent-light text-accent font-medium"
+                    : "text-foreground"
                 }`}
               >
                 <div className="w-6 h-6 rounded-md bg-accent-light flex items-center justify-center text-[10px] font-bold text-accent shrink-0">
@@ -116,10 +144,15 @@ export default function Sidebar({
 
       {/* Search bar */}
       <div className="px-3 mb-1">
-        <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted bg-white border border-border hover:border-accent/30 transition-colors">
+        <button
+          onClick={onOpenSearch}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted bg-white border border-border hover:border-accent/30 transition-colors"
+        >
           <Search className="w-3.5 h-3.5" />
           <span className="text-[13px]">Search...</span>
-          <span className="ml-auto text-[10px] text-muted/60 border border-border rounded px-1.5 py-0.5">⌘K</span>
+          <span className="ml-auto text-[10px] text-muted/60 border border-border rounded px-1.5 py-0.5">
+            ⌘K
+          </span>
         </button>
       </div>
 
@@ -131,16 +164,17 @@ export default function Sidebar({
         {[
           { key: "dashboard", label: "Campaigns", icon: LayoutDashboard },
           { key: "assets", label: "All Assets", icon: FolderOpen },
+          { key: "collections", label: "Collections", icon: FolderKanban },
           { key: "deliverables", label: "Deliverables", icon: Grid3X3 },
         ].map((item) => (
           <button
             key={item.key}
             onClick={() => {
               if (item.key === "assets") onFolderSelect(null);
-              onNavigate(item.key as "dashboard" | "assets" | "deliverables");
+              onNavigate(item.key as View);
             }}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${
-              (currentView === item.key && (item.key !== "assets" || !selectedFolder))
+              currentView === item.key && (item.key !== "assets" || !selectedFolder)
                 ? "bg-accent text-white shadow-sm shadow-accent/25"
                 : "text-slate-600 hover:text-foreground hover:bg-white"
             }`}
@@ -156,9 +190,10 @@ export default function Sidebar({
         <p className="px-2 py-1.5 text-[11px] font-semibold text-muted/70 uppercase tracking-widest">
           Folders
         </p>
-        {folders.map((folder) => {
+        {FOLDERS.map((folder) => {
           const Icon = iconMap[folder.icon] || FolderOpen;
           const isSelected = currentView === "assets" && selectedFolder === folder.id;
+          const count = folderCounts[folder.id] || 0;
           return (
             <button
               key={folder.id}
@@ -171,20 +206,54 @@ export default function Sidebar({
             >
               <Icon className="w-[16px] h-[16px]" />
               <span className="flex-1 text-left truncate">{folder.name}</span>
-              <span className={`text-[11px] px-1.5 py-0.5 rounded-md ${isSelected ? 'bg-accent/10 text-accent' : 'bg-slate-100 text-slate-400'}`}>
-                {folder.count}
-              </span>
+              {count > 0 && (
+                <span
+                  className={`text-[11px] px-1.5 py-0.5 rounded-md ${
+                    isSelected ? "bg-accent/10 text-accent" : "bg-slate-100 text-slate-400"
+                  }`}
+                >
+                  {count}
+                </span>
+              )}
             </button>
           );
         })}
       </nav>
 
-      {/* Share links */}
-      <div className="px-3 py-2 border-t border-border">
-        <button className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-slate-500 hover:text-foreground hover:bg-white transition-all">
+      {/* Team / Share / Activity */}
+      <div className="px-3 py-2 border-t border-border space-y-0.5">
+        <button
+          onClick={() => onNavigate("shareLinks")}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-all ${
+            currentView === "shareLinks"
+              ? "bg-accent-light text-accent font-medium"
+              : "text-slate-500 hover:text-foreground hover:bg-white"
+          }`}
+        >
           <Share2 className="w-[16px] h-[16px]" />
           Share Links
-          <span className="ml-auto text-[11px] bg-accent-light text-accent px-1.5 py-0.5 rounded-md font-medium">2</span>
+        </button>
+        <button
+          onClick={() => onNavigate("team")}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-all ${
+            currentView === "team"
+              ? "bg-accent-light text-accent font-medium"
+              : "text-slate-500 hover:text-foreground hover:bg-white"
+          }`}
+        >
+          <Users className="w-[16px] h-[16px]" />
+          Team
+        </button>
+        <button
+          onClick={() => onNavigate("activity")}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-all ${
+            currentView === "activity"
+              ? "bg-accent-light text-accent font-medium"
+              : "text-slate-500 hover:text-foreground hover:bg-white"
+          }`}
+        >
+          <Activity className="w-[16px] h-[16px]" />
+          Activity
         </button>
       </div>
 

@@ -19,6 +19,13 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if request.auth != null && request.auth.uid == userId;
+
+      // Per-user notifications inbox
+      match /notifications/{notifId} {
+        allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+        // Clients may write their own; in production, Cloud Functions write on behalf of others
+        allow create: if request.auth != null;
+      }
     }
 
     // Workspaces — members only
@@ -63,6 +70,20 @@ service cloud.firestore {
             allow update, delete: if request.auth != null &&
               resource.data.authorId == request.auth.uid;
           }
+
+          // Version history (append-only from client, edits via editor+)
+          match /versions/{versionId} {
+            allow read: if isMember(workspaceId);
+            allow create: if hasAnyRole(workspaceId, ['owner', 'admin', 'editor']);
+            allow update, delete: if hasAnyRole(workspaceId, ['owner', 'admin']);
+          }
+
+          // Review rounds under asset
+          match /reviewRounds/{roundId} {
+            allow read: if isMember(workspaceId);
+            allow create, update: if hasAnyRole(workspaceId, ['owner', 'admin', 'editor', 'reviewer']);
+            allow delete: if hasAnyRole(workspaceId, ['owner', 'admin']);
+          }
         }
 
         // Deliverables matrix
@@ -76,6 +97,27 @@ service cloud.firestore {
       match /shareLinks/{linkId} {
         allow read: if isMember(workspaceId);
         allow write: if hasAnyRole(workspaceId, ['owner', 'admin', 'editor']);
+      }
+
+      // Invitations — admins manage
+      match /invitations/{inviteId} {
+        allow read: if isMember(workspaceId);
+        allow create, update, delete: if hasAnyRole(workspaceId, ['owner', 'admin']);
+      }
+
+      // Collections (saved smart filters) — members can read, editor+ can manage
+      match /collections/{collectionId} {
+        allow read: if isMember(workspaceId);
+        allow write: if hasAnyRole(workspaceId, ['owner', 'admin', 'editor']);
+      }
+
+      // Activity log — members read; writes are append-only (clients log their own actions,
+      // Cloud Functions can backfill). Update/delete forbidden to preserve audit trail.
+      match /activity/{entryId} {
+        allow read: if isMember(workspaceId);
+        allow create: if isMember(workspaceId) &&
+          request.resource.data.actorId == request.auth.uid;
+        allow update, delete: if false;
       }
     }
 

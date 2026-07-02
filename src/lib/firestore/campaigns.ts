@@ -117,3 +117,11 @@ export async function incrementCampaignAssetsCount(
     updatedAt: serverTimestamp(),
   });
 }
+
+export async function decrementCampaignAssetsCount(
+  workspaceId: string,
+  campaignId: string,
+  delta: number
+): Promise<void> {
+  await incrementCampaignAssetsCount(workspaceId, campaignId, -Math.abs(delta));
+}

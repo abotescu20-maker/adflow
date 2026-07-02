@@ -17,6 +17,8 @@ import {
 import type { ApprovalStatus, Campaign } from "@/lib/schema";
 import { useWorkspace } from "@/lib/workspace-context";
 import { useCampaigns } from "@/hooks/useCampaigns";
+import { useAuth } from "@/lib/auth-context";
+import { seedDemoData } from "@/lib/seed";
 
 interface Props {
   onOpenCampaign: (campaignId: string) => void;
@@ -41,8 +43,28 @@ function formatDueDate(c: Campaign): string {
 
 export default function CampaignDashboard({ onOpenCampaign }: Props) {
   const { activeWorkspace } = useWorkspace();
+  const { user, profile } = useAuth();
   const { campaigns, loading } = useCampaigns(activeWorkspace?.id);
   const [modalOpen, setModalOpen] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+
+  const handleSeed = async () => {
+    if (!activeWorkspace || !user || !profile) return;
+    setSeeding(true);
+    try {
+      await seedDemoData({
+        workspaceId: activeWorkspace.id,
+        uid: user.uid,
+        displayName: profile.displayName,
+        photoURL: profile.photoURL ?? null,
+      });
+    } catch (err) {
+      console.error("Seeding failed:", err);
+      alert("Seeding failed — check console for details");
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   const stats = {
     active: campaigns.filter((c) => c.status !== "delivered").length,
@@ -79,6 +101,19 @@ export default function CampaignDashboard({ onOpenCampaign }: Props) {
             </p>
           </div>
           <div className="flex gap-2.5">
+            <button
+              onClick={handleSeed}
+              disabled={seeding}
+              title="Create 4 demo campaigns with assets so you can see how it works"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-accent border border-accent/30 bg-accent-light/50 hover:bg-accent hover:text-white transition-colors shadow-sm disabled:opacity-50"
+            >
+              {seeding ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              {seeding ? "Seeding…" : "Seed demo data"}
+            </button>
             <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-600 border border-border bg-white hover:bg-slate-50 transition-colors shadow-sm">
               <Users className="w-4 h-4" />
               Invite
@@ -161,13 +196,27 @@ export default function CampaignDashboard({ onOpenCampaign }: Props) {
               <p className="text-sm text-muted mb-5 max-w-sm mx-auto">
                 Create your first campaign to start organizing footage, graphics and review cycles in one place.
               </p>
-              <button
-                onClick={() => setModalOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors shadow-sm shadow-accent/20"
-              >
-                <Plus className="w-4 h-4" />
-                Create first campaign
-              </button>
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors shadow-sm shadow-accent/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create first campaign
+                </button>
+                <button
+                  onClick={handleSeed}
+                  disabled={seeding}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-accent border border-accent/30 bg-accent-light/50 hover:bg-accent hover:text-white transition-colors disabled:opacity-50"
+                >
+                  {seeding ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  {seeding ? "Generating demo…" : "Or: load 4 demo campaigns"}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -178,11 +227,20 @@ export default function CampaignDashboard({ onOpenCampaign }: Props) {
                   className="group bg-white rounded-2xl border border-border hover:border-accent/30 hover:shadow-lg transition-all text-left overflow-hidden shadow-sm"
                 >
                   <div className="h-36 bg-gradient-to-br from-slate-50 via-accent-light to-violet-50 relative overflow-hidden">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-5xl font-black text-accent/15">
-                        {(campaign.brand || campaign.name)[0]?.toUpperCase()}
-                      </span>
-                    </div>
+                    {campaign.thumbnailURL ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={campaign.thumbnailURL}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-5xl font-black text-accent/15">
+                          {(campaign.brand || campaign.name)[0]?.toUpperCase()}
+                        </span>
+                      </div>
+                    )}
                     <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-full p-1.5 shadow-sm">
                       <ArrowUpRight className="w-3.5 h-3.5 text-accent" />
                     </div>

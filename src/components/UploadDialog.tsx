@@ -9,11 +9,15 @@ import { useAuth } from "@/lib/auth-context";
 import type { AssetType } from "@/lib/schema";
 
 interface Props {
-  open: boolean;
+  open?: boolean;
   onClose: () => void;
   workspaceId: string;
   campaignId: string;
-  folder: string;
+  folder?: string;
+  /** If set, uploaded file will be saved with this name, creating a new version of the existing asset */
+  forcedName?: string;
+  /** Force a folder regardless of detection */
+  forcedFolder?: string;
 }
 
 interface UploadItem {
@@ -87,7 +91,15 @@ async function extractAudioDuration(file: File): Promise<{ durationSeconds?: num
   });
 }
 
-export default function UploadDialog({ open, onClose, workspaceId, campaignId, folder }: Props) {
+export default function UploadDialog({
+  open = true,
+  onClose,
+  workspaceId,
+  campaignId,
+  folder = "all",
+  forcedName,
+  forcedFolder,
+}: Props) {
   const { user, profile } = useAuth();
   const [items, setItems] = useState<UploadItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -125,8 +137,11 @@ export default function UploadDialog({ open, onClose, workspaceId, campaignId, f
 
     try {
       update({ status: "uploading", progress: 0 });
-      const targetFolder = folder && folder !== "all" ? folder : detectFolder(item.file.type);
-      const pathname = `workspaces/${workspaceId}/campaigns/${campaignId}/${targetFolder}/${item.file.name}`;
+      const targetFolder =
+        forcedFolder ||
+        (folder && folder !== "all" ? folder : detectFolder(item.file.type));
+      const assetName = forcedName || item.file.name;
+      const pathname = `workspaces/${workspaceId}/campaigns/${campaignId}/${targetFolder}/${Date.now()}-${item.file.name}`;
 
       const blob = await upload(pathname, item.file, {
         access: "public",
@@ -143,11 +158,14 @@ export default function UploadDialog({ open, onClose, workspaceId, campaignId, f
       else if (type === "image") meta = await extractImageMetadata(item.file);
       else if (type === "audio") meta = await extractAudioDuration(item.file);
 
+      // createAsset auto-detects same-name existing assets and creates a new version
+      const isNewAsset = !forcedName;
       await createAsset(workspaceId, campaignId, {
-        name: item.file.name,
+        name: assetName,
         type,
         folder: targetFolder,
         storagePath: blob.url,
+        downloadURL: blob.url,
         originalFileName: item.file.name,
         sizeBytes: item.file.size,
         mimeType: item.file.type,
@@ -159,7 +177,10 @@ export default function UploadDialog({ open, onClose, workspaceId, campaignId, f
         format: item.file.type.split("/")[1]?.toUpperCase(),
       });
 
-      await incrementCampaignAssetsCount(workspaceId, campaignId, 1);
+      // Only increment asset count for a genuinely new asset (not a version upload)
+      if (isNewAsset) {
+        await incrementCampaignAssetsCount(workspaceId, campaignId, 1);
+      }
       update({ status: "done" });
     } catch (err) {
       update({ status: "error", error: err instanceof Error ? err.message : "Upload failed" });

@@ -1,0 +1,132 @@
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  query,
+  orderBy,
+  addDoc,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import type { WorkspaceMember, WorkspaceRole, WorkspaceInvitation } from "@/lib/schema";
+
+export function membersRef(workspaceId: string) {
+  return collection(db, "workspaces", workspaceId, "members");
+}
+
+export function memberRef(workspaceId: string, uid: string) {
+  return doc(db, "workspaces", workspaceId, "members", uid);
+}
+
+export function membersQuery(workspaceId: string) {
+  return query(membersRef(workspaceId), orderBy("addedAt", "asc"));
+}
+
+export function invitationsRef(workspaceId: string) {
+  return collection(db, "workspaces", workspaceId, "invitations");
+}
+
+export function invitationRef(workspaceId: string, inviteId: string) {
+  return doc(db, "workspaces", workspaceId, "invitations", inviteId);
+}
+
+export function invitationsQuery(workspaceId: string) {
+  return query(invitationsRef(workspaceId), orderBy("createdAt", "desc"));
+}
+
+// --- members ---
+
+export async function addMember(
+  workspaceId: string,
+  member: Omit<WorkspaceMember, "addedAt"> & { addedBy: string }
+): Promise<void> {
+  await setDoc(memberRef(workspaceId, member.uid), {
+    uid: member.uid,
+    email: member.email,
+    displayName: member.displayName,
+    photoURL: member.photoURL ?? null,
+    role: member.role,
+    addedAt: serverTimestamp(),
+    addedBy: member.addedBy,
+  });
+}
+
+export async function updateMemberRole(
+  workspaceId: string,
+  uid: string,
+  role: WorkspaceRole
+): Promise<void> {
+  await updateDoc(memberRef(workspaceId, uid), {
+    role,
+  });
+}
+
+export async function removeMember(workspaceId: string, uid: string): Promise<void> {
+  await deleteDoc(memberRef(workspaceId, uid));
+}
+
+// --- invitations ---
+
+function generateInviteToken(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export interface CreateInvitationInput {
+  email: string;
+  role: WorkspaceRole;
+  invitedBy: string;
+  invitedByName: string;
+  workspaceName: string;
+  expiresInDays?: number;
+}
+
+export async function createInvitation(
+  workspaceId: string,
+  input: CreateInvitationInput
+): Promise<{ id: string; token: string }> {
+  const token = generateInviteToken();
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + (input.expiresInDays ?? 7));
+
+  const docRef = await addDoc(invitationsRef(workspaceId), {
+    email: input.email.toLowerCase().trim(),
+    role: input.role,
+    invitedBy: input.invitedBy,
+    invitedByName: input.invitedByName,
+    workspaceId,
+    workspaceName: input.workspaceName,
+    token,
+    createdAt: serverTimestamp(),
+    expiresAt,
+    acceptedAt: null,
+    acceptedByUid: null,
+  });
+
+  return { id: docRef.id, token };
+}
+
+export async function revokeInvitation(
+  workspaceId: string,
+  inviteId: string
+): Promise<void> {
+  await deleteDoc(invitationRef(workspaceId, inviteId));
+}
+
+export async function acceptInvitation(
+  workspaceId: string,
+  inviteId: string,
+  uid: string
+): Promise<void> {
+  await updateDoc(invitationRef(workspaceId, inviteId), {
+    acceptedAt: serverTimestamp(),
+    acceptedByUid: uid,
+  });
+}
+
+export type { WorkspaceMember, WorkspaceRole, WorkspaceInvitation };
