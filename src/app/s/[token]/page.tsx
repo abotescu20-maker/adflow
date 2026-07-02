@@ -61,6 +61,20 @@ export default function PublicSharePage({
       }
   >({ kind: "loading" });
   const [activeIndex, setActiveIndex] = useState(0);
+  // Guest review interaction (02.07.2026): name + comment + approve/request-changes,
+  // all persisted server-side via /api/share/[token]/* (Firestore rules forbid
+  // anonymous writes, so the trusted server tier does it after validating the token).
+  const [guestName, setGuestName] = useState("");
+  const [commentText, setCommentText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [flash, setFlash] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("adflow_guest_name");
+      if (saved) setGuestName(saved);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,6 +183,68 @@ export default function PublicSharePage({
   const { share, campaign, assets } = state;
   const asset = assets[activeIndex];
 
+  function rememberName() {
+    try {
+      if (guestName.trim()) localStorage.setItem("adflow_guest_name", guestName.trim());
+    } catch {}
+  }
+
+  async function postComment() {
+    if (!asset || !commentText.trim() || busy) return;
+    setBusy(true);
+    setFlash(null);
+    try {
+      rememberName();
+      const res = await fetch(`/api/share/${token}/comment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assetId: asset.id,
+          text: commentText.trim(),
+          guestName: guestName.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to post comment");
+      setCommentText("");
+      setFlash({ kind: "ok", msg: "Comment sent to the team ✓" });
+    } catch (e) {
+      setFlash({ kind: "err", msg: e instanceof Error ? e.message : "Failed" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decide(decision: "approved" | "changes_requested") {
+    if (!asset || busy) return;
+    setBusy(true);
+    setFlash(null);
+    try {
+      rememberName();
+      const res = await fetch(`/api/share/${token}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assetId: asset.id,
+          decision,
+          guestName: guestName.trim(),
+          note: commentText.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to record decision");
+      setCommentText("");
+      setFlash({
+        kind: "ok",
+        msg: decision === "approved" ? "Approved ✓ — the team was notified" : "Changes requested ✓",
+      });
+    } catch (e) {
+      setFlash({ kind: "err", msg: e instanceof Error ? e.message : "Failed" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Header */}
@@ -241,28 +317,83 @@ export default function PublicSharePage({
                 )}
               </div>
 
-              {/* Footer actions */}
-              <div className="bg-white border-t border-border px-6 py-3 flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground">{asset.name}</h4>
-                  <p className="text-[11px] text-muted">
-                    {asset.width && asset.height ? `${asset.width}×${asset.height}` : ""}
-                    {asset.durationSeconds
-                      ? ` · ${Math.round(asset.durationSeconds)}s`
-                      : ""}
-                  </p>
+              {/* Footer: review actions (name + comment + approve/request changes) */}
+              <div className="bg-white border-t border-border px-6 py-3 space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-semibold text-foreground truncate">{asset.name}</h4>
+                    <p className="text-[11px] text-muted">
+                      {asset.width && asset.height ? `${asset.width}×${asset.height}` : ""}
+                      {asset.durationSeconds ? ` · ${Math.round(asset.durationSeconds)}s` : ""}
+                    </p>
+                  </div>
+                  {(share.permissions.canComment || share.permissions.canApprove) && (
+                    <input
+                      value={guestName}
+                      onChange={(e) => setGuestName(e.target.value)}
+                      placeholder="Your name"
+                      className="w-40 shrink-0 px-3 py-1.5 rounded-lg border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
+                    />
+                  )}
                 </div>
+
+                {(share.permissions.canComment || share.permissions.canApprove) && (
+                  <div className="flex items-end gap-2">
+                    <textarea
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      placeholder={
+                        share.permissions.canComment
+                          ? "Leave feedback for the team…"
+                          : "Add a note (optional)…"
+                      }
+                      rows={2}
+                      className="flex-1 px-3 py-2 rounded-lg border border-border text-xs resize-none focus:outline-none focus:ring-2 focus:ring-accent/40"
+                    />
+                    <div className="flex flex-col gap-2">
+                      {share.permissions.canComment && (
+                        <button
+                          onClick={postComment}
+                          disabled={busy || !commentText.trim()}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-border text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-40"
+                        >
+                          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                          Send comment
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {share.permissions.canApprove && (
                   <div className="flex items-center gap-2">
-                    <button className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-border text-red-600 hover:bg-red-50 transition-colors">
+                    <button
+                      onClick={() => decide("changes_requested")}
+                      disabled={busy}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-border text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                    >
                       <XCircle className="w-3.5 h-3.5" />
                       Request Changes
                     </button>
-                    <button className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-600 transition-colors shadow-sm">
+                    <button
+                      onClick={() => decide("approved")}
+                      disabled={busy}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-600 transition-colors shadow-sm disabled:opacity-40"
+                    >
                       <CheckCircle className="w-3.5 h-3.5" />
                       Approve
                     </button>
                   </div>
+                )}
+
+                {flash && (
+                  <p
+                    className={`text-[11px] font-medium ${
+                      flash.kind === "ok" ? "text-emerald-600" : "text-red-600"
+                    }`}
+                  >
+                    {flash.msg}
+                  </p>
                 )}
               </div>
             </>
