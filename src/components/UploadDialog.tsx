@@ -143,9 +143,14 @@ export default function UploadDialog({
       const assetName = forcedName || item.file.name;
       const pathname = `workspaces/${workspaceId}/campaigns/${campaignId}/${targetFolder}/${Date.now()}-${item.file.name}`;
 
+      // Send the Firebase ID token so the server can authenticate the upload
+      // (see src/app/api/upload/route.ts). Without this the server rejects the
+      // request — the route no longer mints blob tokens for anonymous callers.
+      const idToken = await user.getIdToken();
       const blob = await upload(pathname, item.file, {
         access: "public",
         handleUploadUrl: "/api/upload",
+        clientPayload: idToken,
         onUploadProgress: ({ percentage }) => update({ progress: percentage }),
       });
 

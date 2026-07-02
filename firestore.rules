@@ -23,8 +23,14 @@ service cloud.firestore {
       // Per-user notifications inbox
       match /notifications/{notifId} {
         allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-        // Clients may write their own; in production, Cloud Functions write on behalf of others
-        allow create: if request.auth != null;
+        // SECURITY (02.07.2026, H3): bind the notification's actor to the caller so a
+        // signed-in user cannot forge WHO a notification appears to come from (in-app
+        // phishing). Cross-user delivery is still allowed (sender writes into another
+        // inbox with actorId == self); system/fan-out notifications should move to a
+        // Cloud Function (P1). Previously `if request.auth != null` let anyone spoof
+        // any actor into any inbox.
+        allow create: if request.auth != null &&
+          request.resource.data.actorId == request.auth.uid;
       }
     }
 
@@ -66,7 +72,11 @@ service cloud.firestore {
           // Comments on assets
           match /comments/{commentId} {
             allow read: if isMember(workspaceId);
-            allow create: if isMember(workspaceId);
+            // SECURITY (02.07.2026, H1): bind authorId to the caller so a member
+            // cannot post a comment impersonating another user. update/delete are
+            // already keyed on authorId below.
+            allow create: if isMember(workspaceId) &&
+              request.resource.data.authorId == request.auth.uid;
             allow update, delete: if request.auth != null &&
               resource.data.authorId == request.auth.uid;
           }
