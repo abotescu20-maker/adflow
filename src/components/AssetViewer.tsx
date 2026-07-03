@@ -20,6 +20,7 @@ import {
   Columns,
   Paperclip,
   AtSign,
+  Pencil,
   Download,
   Share2,
   CheckCircle,
@@ -75,6 +76,7 @@ import type {
 import ShareLinkModal from "@/components/ShareLinkModal";
 import UploadDialog from "@/components/UploadDialog";
 import VersionCompare from "@/components/VersionCompare";
+import FrameAnnotator from "@/components/FrameAnnotator";
 import { useToast } from "@/components/Toast";
 
 function formatTimecode(seconds: number): string {
@@ -205,6 +207,7 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
   const [shareOpen, setShareOpen] = useState(false);
   const [newVersionOpen, setNewVersionOpen] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
+  const [annotateOpen, setAnnotateOpen] = useState(false);
 
   const duration = asset?.durationSeconds || 0;
   const currentTimecode = formatTimecode(currentTime);
@@ -394,6 +397,15 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
           </div>
         </div>
         <div className="flex items-center gap-2.5">
+          {(asset.type === "video" || asset.type === "image") && mediaSrc && (
+            <button
+              onClick={() => setAnnotateOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 border border-border bg-white hover:bg-slate-50 transition-colors shadow-sm"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Annotate
+            </button>
+          )}
           {versions.some((v) => v.version < asset.version) && (
             <button
               onClick={() => setShowCompare(true)}
@@ -849,6 +861,21 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
           asset={asset}
           versions={versions}
           onClose={() => setShowCompare(false)}
+        />
+      )}
+      {annotateOpen && (
+        <FrameAnnotator
+          asset={asset}
+          mediaSrc={mediaSrc}
+          time={videoEl?.currentTime ?? currentTime}
+          onClose={() => setAnnotateOpen(false)}
+          onSave={async (blob) => {
+            await addAttachment(
+              new File([blob], `annotation-${Date.now()}.jpg`, { type: "image/jpeg" })
+            );
+            setActiveTab("comments");
+            if (!commentText.trim()) setCommentText("Annotation attached — ");
+          }}
         />
       )}
     </div>
