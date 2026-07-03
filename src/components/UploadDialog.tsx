@@ -91,6 +91,77 @@ async function extractAudioDuration(file: File): Promise<{ durationSeconds?: num
   });
 }
 
+// 02.07.2026: video/image thumbnails. `thumbnailURL` was read across the app
+// (AssetBrowser, CampaignDashboard) but never written, so every grid showed a
+// generic type icon instead of a real preview. We capture a poster frame client-
+// side (best-effort) and upload it as a small JPEG next to the asset.
+const THUMB_MAX_W = 640;
+
+function canvasToJpegBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/jpeg", 0.8));
+}
+
+async function generateVideoThumbnail(file: File): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    (video as HTMLVideoElement & { playsInline?: boolean }).playsInline = true;
+    const url = URL.createObjectURL(file);
+    const done = (b: Blob | null) => {
+      URL.revokeObjectURL(url);
+      resolve(b);
+    };
+    video.onloadedmetadata = () => {
+      const t = isFinite(video.duration) ? Math.min(1, video.duration * 0.1) : 0;
+      video.currentTime = t >= 0 ? t : 0;
+    };
+    video.onseeked = async () => {
+      try {
+        const scale = video.videoWidth ? Math.min(1, THUMB_MAX_W / video.videoWidth) : 1;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+        canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return done(null);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        done(await canvasToJpegBlob(canvas));
+      } catch {
+        done(null);
+      }
+    };
+    video.onerror = () => done(null);
+    video.src = url;
+  });
+}
+
+async function generateImageThumbnail(file: File): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    const done = (b: Blob | null) => {
+      URL.revokeObjectURL(url);
+      resolve(b);
+    };
+    img.onload = async () => {
+      try {
+        const scale = img.naturalWidth ? Math.min(1, THUMB_MAX_W / img.naturalWidth) : 1;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return done(null);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        done(await canvasToJpegBlob(canvas));
+      } catch {
+        done(null);
+      }
+    };
+    img.onerror = () => done(null);
+    img.src = url;
+  });
+}
+
 export default function UploadDialog({
   open = true,
   onClose,
@@ -163,6 +234,27 @@ export default function UploadDialog({
       else if (type === "image") meta = await extractImageMetadata(item.file);
       else if (type === "audio") meta = await extractAudioDuration(item.file);
 
+      // Best-effort thumbnail (poster frame for video, downscale for image).
+      let thumbnailURL: string | undefined;
+      try {
+        let thumbBlob: Blob | null = null;
+        if (type === "video") thumbBlob = await generateVideoThumbnail(item.file);
+        else if (type === "image") thumbBlob = await generateImageThumbnail(item.file);
+        if (thumbBlob && thumbBlob.size > 0) {
+          const thumbPath = `workspaces/${workspaceId}/campaigns/${campaignId}/${targetFolder}/thumbnails/${Date.now()}-${item.file.name}.jpg`;
+          const thumbFile = new File([thumbBlob], `thumb-${item.file.name}.jpg`, { type: "image/jpeg" });
+          const thumbToken = await user.getIdToken();
+          const thumbBlobRes = await upload(thumbPath, thumbFile, {
+            access: "public",
+            handleUploadUrl: "/api/upload",
+            clientPayload: thumbToken,
+          });
+          thumbnailURL = thumbBlobRes.url;
+        }
+      } catch {
+        // thumbnail is non-essential — never fail the upload over it
+      }
+
       // createAsset auto-detects same-name existing assets and creates a new version
       const isNewAsset = !forcedName;
       await createAsset(workspaceId, campaignId, {
@@ -171,6 +263,7 @@ export default function UploadDialog({
         folder: targetFolder,
         storagePath: blob.url,
         downloadURL: blob.url,
+        thumbnailURL,
         originalFileName: item.file.name,
         sizeBytes: item.file.size,
         mimeType: item.file.type,
