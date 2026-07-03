@@ -361,7 +361,7 @@ export interface Comment {
   resolvedBy?: string;
   resolvedAt?: Timestamp;
   parentCommentId?: string; // for threaded replies
-  attachments?: string[]; // URLs
+  attachments?: { url: string; name: string; contentType?: string }[];
   mentions?: string[]; // user UIDs mentioned
   createdAt: Timestamp;
   updatedAt: Timestamp;

@@ -18,6 +18,8 @@ import {
   Lock,
   MoreHorizontal,
   Columns,
+  Paperclip,
+  AtSign,
   Download,
   Share2,
   CheckCircle,
@@ -43,7 +45,10 @@ import {
   resolveComment,
   unresolveComment,
   repliesQuery,
+  type CommentAttachment,
 } from "@/lib/firestore/comments";
+import { useMembers } from "@/hooks/useMembers";
+import { upload } from "@vercel/blob/client";
 import {
   updateAssetStatus,
   switchActiveVersion,
@@ -166,6 +171,36 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
   const [commentText, setCommentText] = useState("");
   const [commentVisibility, setCommentVisibility] = useState<"public" | "team">("public");
   const [sendingComment, setSendingComment] = useState(false);
+  const [pendingAtts, setPendingAtts] = useState<CommentAttachment[]>([]);
+  const [attaching, setAttaching] = useState(false);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionedUids, setMentionedUids] = useState<string[]>([]);
+  const { members } = useMembers(workspaceId);
+
+  const addAttachment = async (file: File) => {
+    if (!user) return;
+    setAttaching(true);
+    try {
+      const idToken = await user.getIdToken();
+      const path = `workspaces/${workspaceId}/campaigns/${campaignId}/${asset?.folder || "comments"}/comment-att/${Date.now()}-${file.name}`;
+      const res = await upload(path, file, {
+        access: "public",
+        handleUploadUrl: "/api/upload",
+        clientPayload: idToken,
+      });
+      setPendingAtts((a) => [...a, { url: res.url, name: file.name, contentType: file.type }]);
+    } catch {
+      toast.error("Upload failed", "Could not attach that file.");
+    } finally {
+      setAttaching(false);
+    }
+  };
+
+  const insertMention = (uid: string, name: string) => {
+    setCommentText((t) => `${t}${t && !t.endsWith(" ") ? " " : ""}@${name} `);
+    setMentionedUids((m) => (m.includes(uid) ? m : [...m, uid]));
+    setMentionOpen(false);
+  };
   const [approving, setApproving] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [newVersionOpen, setNewVersionOpen] = useState(false);
@@ -188,7 +223,25 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
         authorId: user.uid,
         authorName: profile.displayName,
         authorAvatar: profile.photoURL,
+        mentions: mentionedUids,
+        attachments: pendingAtts,
       });
+      // Notify @mentioned members (except self).
+      for (const uid of mentionedUids) {
+        if (uid === user.uid) continue;
+        createNotification({
+          uid,
+          workspaceId,
+          kind: "mention",
+          title: `${profile.displayName} mentioned you`,
+          body: `${asset.name} — "${commentText.trim().slice(0, 80)}"`,
+          actorId: user.uid,
+          actorName: profile.displayName,
+          targetUrl: `/?campaign=${campaignId}&asset=${assetId}`,
+        }).catch(() => {});
+      }
+      setPendingAtts([]);
+      setMentionedUids([]);
       await incrementAssetCommentsCount(workspaceId, campaignId, assetId, 1);
       await logActivity(workspaceId, {
         actorId: user.uid,
@@ -676,7 +729,71 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                   {commentVisibility === "public" ? <Eye className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
                   {commentVisibility === "public" ? "Public" : "Team"}
                 </button>
+                <div className="flex-1" />
+                <label
+                  className="p-1 rounded-md text-muted hover:text-accent hover:bg-accent-light cursor-pointer transition-colors"
+                  title="Attach a file"
+                >
+                  {attaching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) addAttachment(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                <div className="relative">
+                  <button
+                    onClick={() => setMentionOpen((o) => !o)}
+                    className="p-1 rounded-md text-muted hover:text-accent hover:bg-accent-light transition-colors"
+                    title="Mention a teammate"
+                  >
+                    <AtSign className="w-3.5 h-3.5" />
+                  </button>
+                  {mentionOpen && (
+                    <div className="absolute bottom-full right-0 mb-1 w-48 max-h-52 overflow-y-auto bg-white border border-border rounded-lg shadow-lg z-20 py-1">
+                      {members.length === 0 ? (
+                        <p className="px-3 py-2 text-[11px] text-muted">No teammates</p>
+                      ) : (
+                        members.map((m) => (
+                          <button
+                            key={m.uid}
+                            onClick={() => insertMention(m.uid, m.displayName)}
+                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2"
+                          >
+                            <span className="w-5 h-5 rounded-full bg-slate-300 flex items-center justify-center text-[8px] font-bold text-white shrink-0">
+                              {getInitials(m.displayName)}
+                            </span>
+                            <span className="truncate">{m.displayName}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
+              {pendingAtts.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {pendingAtts.map((a, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent-light text-accent text-[11px] font-medium"
+                    >
+                      <Paperclip className="w-3 h-3" />
+                      <span className="max-w-[120px] truncate">{a.name}</span>
+                      <button
+                        onClick={() => setPendingAtts((list) => list.filter((_, j) => j !== i))}
+                        className="hover:text-red-600"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="flex items-end gap-2">
                 <div className="flex-1 bg-white rounded-xl border border-border focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/10 transition-all shadow-sm">
                   <textarea
@@ -1277,6 +1394,22 @@ function CommentCard({
           <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">
             {comment.text}
           </p>
+          {comment.attachments && comment.attachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {comment.attachments.map((a, i) => (
+                <a
+                  key={i}
+                  href={a.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-medium hover:bg-slate-200 transition-colors"
+                >
+                  <Paperclip className="w-3 h-3" />
+                  <span className="max-w-[140px] truncate">{a.name}</span>
+                </a>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-3 mt-2">
             <span className="text-[10px] text-muted">{formatTimeAgo(comment.createdAt)}</span>
             {authorId && (

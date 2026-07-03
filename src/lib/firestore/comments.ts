@@ -74,6 +74,12 @@ export function repliesQuery(
   );
 }
 
+export interface CommentAttachment {
+  url: string;
+  name: string;
+  contentType?: string;
+}
+
 export interface CreateCommentInput {
   text: string;
   timecode?: number;
@@ -83,6 +89,7 @@ export interface CreateCommentInput {
   authorAvatar?: string;
   parentCommentId?: string;
   mentions?: string[];
+  attachments?: CommentAttachment[];
 }
 
 export async function createComment(
@@ -105,7 +112,7 @@ export async function createComment(
     resolvedBy: null,
     resolvedAt: null,
     parentCommentId: input.parentCommentId ?? null,
-    attachments: [],
+    attachments: input.attachments ?? [],
     mentions: input.mentions ?? [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
