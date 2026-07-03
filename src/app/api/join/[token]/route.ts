@@ -18,10 +18,9 @@ export async function POST(
 
     const decoded = await verifyIdToken(body.idToken);
     const uid = decoded.uid;
-    const email = (decoded.email || "").toLowerCase();
-    const displayName =
-      (decoded.name as string) || (decoded.email as string) || "Member";
-    const photoURL = (decoded.picture as string) || null;
+    const email = decoded.email;
+    const displayName = decoded.name;
+    const photoURL = decoded.picture;
 
     if (!token || token.length < 8) {
       return NextResponse.json({ error: "Invalid invite" }, { status: 400 });

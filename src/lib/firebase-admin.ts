@@ -1,16 +1,17 @@
 import { getApps, initializeApp, cert, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
-import { getAuth, type Auth } from "firebase-admin/auth";
 
 // Trusted server tier (02.07.2026). The client-only Firebase model has no place
 // to safely perform operations that must NOT be exposed to the browser — chiefly
-// resolving a public share token and writing a guest's comment/approval on their
-// behalf (Firestore rules correctly forbid anonymous writes). This module boots
-// the Admin SDK from a base64-encoded service-account key held ONLY in server env
+// resolving a public share token and writing a guest's comment/approval, and
+// accepting workspace invitations. This module boots the Admin SDK for Firestore
+// writes from a base64 service-account key in server env only
 // (FIREBASE_SERVICE_ACCOUNT_B64 — never NEXT_PUBLIC, never committed).
 //
-// The Admin SDK bypasses all security rules, so every route that uses it MUST
-// validate authorization itself (see src/app/api/share/*).
+// NOTE: we deliberately do NOT import `firebase-admin/auth`. Its transitive dep
+// chain (jwks-rsa → jose) is ESM-only and blows up under the serverless CJS
+// loader (ERR_REQUIRE_ESM). ID tokens are verified via the Identity Toolkit REST
+// endpoint below instead, which needs no extra deps.
 
 let _app: App | null = null;
 
@@ -24,8 +25,7 @@ function getAdminApp(): App {
   const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
   if (!b64) {
     throw new Error(
-      "FIREBASE_SERVICE_ACCOUNT_B64 is not set — the server tier cannot start. " +
-        "Add the base64 service-account key to the server environment."
+      "FIREBASE_SERVICE_ACCOUNT_B64 is not set — the server tier cannot start."
     );
   }
   const json = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
@@ -43,12 +43,37 @@ export function adminDb(): Firestore {
   return getFirestore(getAdminApp());
 }
 
-export function adminAuth(): Auth {
-  return getAuth(getAdminApp());
+export interface VerifiedUser {
+  uid: string;
+  email: string;
+  name: string;
+  picture: string | null;
 }
 
-// Verify a Firebase ID token; returns the decoded token (uid + claims) or throws.
-export async function verifyIdToken(idToken: string | null | undefined) {
+// Verify a Firebase ID token via the Identity Toolkit REST API (project-scoped by
+// the public web API key). Returns the resolved user or throws.
+export async function verifyIdToken(idToken: string | null | undefined): Promise<VerifiedUser> {
   if (!idToken) throw new Error("Missing auth token");
-  return adminAuth().verifyIdToken(idToken);
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  if (!apiKey) throw new Error("Server misconfigured: missing Firebase API key");
+  const res = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken }),
+    }
+  );
+  if (!res.ok) throw new Error("Invalid auth token");
+  const data = (await res.json()) as {
+    users?: Array<{ localId?: string; email?: string; displayName?: string; photoUrl?: string }>;
+  };
+  const u = data.users?.[0];
+  if (!u?.localId) throw new Error("Auth token did not resolve to a user");
+  return {
+    uid: u.localId,
+    email: (u.email || "").toLowerCase(),
+    name: u.displayName || u.email || "Member",
+    picture: u.photoUrl || null,
+  };
 }
