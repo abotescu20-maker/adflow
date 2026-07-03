@@ -73,7 +73,11 @@ const ICON_MAP: Record<string, React.ElementType> = {
   user: User,
 };
 
-export default function CollectionsView() {
+export default function CollectionsView({
+  onOpen,
+}: {
+  onOpen: (collection: Collection) => void;
+}) {
   const { user, profile } = useAuth();
   const { activeWorkspace } = useWorkspace();
   const { collections, loading } = useCollections(activeWorkspace?.id ?? null);
@@ -154,6 +158,7 @@ export default function CollectionsView() {
               <CollectionCard
                 key={c.id}
                 collection={c}
+                onOpen={() => onOpen(c)}
                 onDelete={async () => {
                   if (!confirm(`Delete collection "${c.name}"?`)) return;
                   await deleteCollection(activeWorkspace.id, c.id);
@@ -205,10 +210,12 @@ export default function CollectionsView() {
 
 function CollectionCard({
   collection,
+  onOpen,
   onDelete,
   onPin,
 }: {
   collection: Collection;
+  onOpen: () => void;
   onDelete: () => void;
   onPin: () => void;
 }) {
@@ -217,7 +224,10 @@ function CollectionCard({
 
   return (
     <div className="rounded-xl border border-border bg-white hover:border-accent/30 hover:shadow-sm transition-all p-4">
-      <div className="flex items-start gap-3 mb-2">
+      <div
+        onClick={onOpen}
+        className="flex items-start gap-3 mb-2 cursor-pointer"
+      >
         <div
           className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
           style={{
@@ -228,7 +238,7 @@ function CollectionCard({
           <Icon className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-foreground truncate">
+          <h3 className="text-sm font-semibold text-foreground truncate hover:text-accent transition-colors">
             {collection.name}
           </h3>
           {collection.description && (

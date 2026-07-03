@@ -9,6 +9,8 @@ import AssetBrowser from "@/components/AssetBrowser";
 import AssetViewer from "@/components/AssetViewer";
 import DeliverablesMatrix from "@/components/DeliverablesMatrix";
 import CollectionsView from "@/components/CollectionsView";
+import CollectionResults from "@/components/CollectionResults";
+import type { Collection } from "@/lib/schema";
 import ActivityView from "@/components/ActivityView";
 import TeamView from "@/components/TeamView";
 import ShareLinksView from "@/components/ShareLinksView";
@@ -27,6 +29,7 @@ export default function Home() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [openCollection, setOpenCollection] = useState<Collection | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -90,6 +93,7 @@ export default function Home() {
   };
 
   const handleNavigate = (newView: View) => {
+    setOpenCollection(null);
     if (newView === "dashboard") {
       setSelectedCampaignId(null);
       setSelectedAssetId(null);
@@ -164,7 +168,20 @@ export default function Home() {
             />
           )}
           {view === "deliverables" && <DeliverablesMatrix />}
-          {view === "collections" && <CollectionsView />}
+          {view === "collections" &&
+            (openCollection ? (
+              <CollectionResults
+                workspaceId={activeWorkspace.id}
+                collection={openCollection}
+                onBack={() => setOpenCollection(null)}
+                onOpenAsset={(campaignId, assetId) => {
+                  setOpenCollection(null);
+                  handleOpenAssetCross(campaignId, assetId);
+                }}
+              />
+            ) : (
+              <CollectionsView onOpen={(c) => setOpenCollection(c)} />
+            ))}
           {view === "activity" && <ActivityView />}
           {view === "team" && <TeamView />}
           {view === "shareLinks" && <ShareLinksView />}

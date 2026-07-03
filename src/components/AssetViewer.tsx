@@ -366,7 +366,7 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Media area */}
         <div className="flex-1 flex flex-col">
           <div className="flex-1 bg-slate-900 relative flex items-center justify-center overflow-hidden">
@@ -556,7 +556,7 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
         </div>
 
         {/* Right panel */}
-        <div className="w-[360px] border-l border-border flex flex-col bg-white shrink-0">
+        <div className="w-full md:w-[360px] border-t md:border-t-0 md:border-l border-border flex flex-col bg-white shrink-0 max-h-[45vh] md:max-h-none">
           <div className="flex border-b border-border">
             {([
               { k: "comments", label: `Comments (${comments.length})` },
