@@ -39,6 +39,20 @@ export default function Home() {
     }
   }, [user, authLoading, workspaces, wsLoading, router]);
 
+  // Deep-link: open a specific asset from a notification link (/?campaign=..&asset=..)
+  useEffect(() => {
+    if (authLoading || wsLoading || !user) return;
+    const params = new URLSearchParams(window.location.search);
+    const camp = params.get("campaign");
+    const asset = params.get("asset");
+    if (camp && asset) {
+      setSelectedCampaignId(camp);
+      setSelectedAssetId(asset);
+      setView("viewer");
+      window.history.replaceState(null, "", "/");
+    }
+  }, [authLoading, wsLoading, user]);
+
   // ⌘K / Ctrl+K global search shortcut
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

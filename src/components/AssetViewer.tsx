@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { onSnapshot } from "firebase/firestore";
 import {
   ArrowLeft,
   Play,
@@ -10,14 +11,12 @@ import {
   Volume2,
   Maximize2,
   Send,
-  Paperclip,
-  Smile,
-  AtSign,
+  ChevronLeft,
+  ChevronRight,
   Check,
   Eye,
   Lock,
   MoreHorizontal,
-  Pencil,
   Download,
   Share2,
   CheckCircle,
@@ -42,6 +41,7 @@ import {
   createComment,
   resolveComment,
   unresolveComment,
+  repliesQuery,
 } from "@/lib/firestore/comments";
 import {
   updateAssetStatus,
@@ -130,6 +130,34 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
 
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // Keyboard shortcuts for the player (frame.io-style). Ignored while typing.
+  useEffect(() => {
+    if (!videoEl) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      const FRAME = 1 / 30;
+      if (e.key === " ") {
+        e.preventDefault();
+        if (videoEl.paused) videoEl.play();
+        else videoEl.pause();
+      } else if (e.key === ",") {
+        videoEl.pause();
+        videoEl.currentTime = Math.max(0, videoEl.currentTime - FRAME);
+      } else if (e.key === ".") {
+        videoEl.pause();
+        videoEl.currentTime = Math.min(videoEl.duration || 0, videoEl.currentTime + FRAME);
+      } else if (e.key === "ArrowLeft") {
+        videoEl.currentTime = Math.max(0, videoEl.currentTime - 5);
+      } else if (e.key === "ArrowRight") {
+        videoEl.currentTime = Math.min(videoEl.duration || 0, videoEl.currentTime + 5);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [videoEl]);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>("comments");
@@ -183,7 +211,7 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
           body: `${asset.name} — "${commentText.trim().slice(0, 80)}"`,
           actorId: user.uid,
           actorName: profile.displayName,
-          targetUrl: "/",
+          targetUrl: `/?campaign=${campaignId}&asset=${assetId}`,
         }).catch(() => {});
       }
     } catch (err) {
@@ -234,7 +262,7 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
         body: `${asset.name} — V${asset.version}`,
         actorId: user.uid,
         actorName: profile.displayName,
-        targetUrl: "/",
+        targetUrl: `/?campaign=${campaignId}&asset=${assetId}`,
       }).catch(() => {});
     } catch (err) {
       toast.error(
@@ -494,8 +522,21 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <button className="p-1.5 text-muted hover:text-foreground hover:bg-slate-100 rounded-lg transition-colors">
-                  <Pencil className="w-4 h-4" />
+                <button
+                  onClick={() => { if (videoEl) { videoEl.pause(); videoEl.currentTime = Math.max(0, videoEl.currentTime - 1 / 30); } }}
+                  disabled={!videoEl}
+                  title="Previous frame (,)"
+                  className="p-1.5 text-muted hover:text-foreground hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => { if (videoEl) { videoEl.pause(); videoEl.currentTime = Math.min(videoEl.duration || 0, videoEl.currentTime + 1 / 30); } }}
+                  disabled={!videoEl}
+                  title="Next frame (.)"
+                  className="p-1.5 text-muted hover:text-foreground hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40"
+                >
+                  <ChevronRight className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => videoEl && (videoEl.muted = !videoEl.muted)}
@@ -557,6 +598,11 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                       comment={comment}
                       canResolve={!!user}
                       onResolve={() => handleResolve(comment)}
+                      workspaceId={workspaceId}
+                      campaignId={campaignId}
+                      assetId={assetId}
+                      authorId={user?.uid || null}
+                      authorName={profile?.displayName || "Member"}
                       onSeek={(t) => {
                         if (videoEl) videoEl.currentTime = t;
                         else {
@@ -633,17 +679,6 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                     placeholder="Leave your comment…"
                     className="w-full bg-transparent text-sm px-3.5 py-2.5 resize-none h-16 outline-none placeholder:text-muted/50"
                   />
-                  <div className="flex items-center gap-0.5 px-2 pb-2">
-                    {[Pencil, Paperclip, Smile, AtSign].map((Icon, i) => (
-                      <button
-                        key={i}
-                        className="text-muted hover:text-accent transition-colors p-1.5 rounded-lg hover:bg-accent-light"
-                        disabled
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                      </button>
-                    ))}
-                  </div>
                 </div>
                 <button
                   onClick={handleSendComment}
@@ -1144,12 +1179,54 @@ function CommentCard({
   canResolve,
   onResolve,
   onSeek,
+  workspaceId,
+  campaignId,
+  assetId,
+  authorId,
+  authorName,
 }: {
   comment: CommentType;
   canResolve: boolean;
   onResolve: () => void;
   onSeek: (t: number) => void;
+  workspaceId: string;
+  campaignId: string;
+  assetId: string;
+  authorId: string | null;
+  authorName: string;
 }) {
+  const [replies, setReplies] = useState<CommentType[]>([]);
+  const [showReply, setShowReply] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      repliesQuery(workspaceId, campaignId, assetId, comment.id),
+      (snap) =>
+        setReplies(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CommentType)))
+    );
+    return () => unsub();
+  }, [workspaceId, campaignId, assetId, comment.id]);
+
+  const sendReply = async () => {
+    if (!authorId || !replyText.trim() || sending) return;
+    setSending(true);
+    try {
+      await createComment(workspaceId, campaignId, assetId, {
+        text: replyText.trim(),
+        visibility: comment.visibility,
+        authorId,
+        authorName,
+        parentCommentId: comment.id,
+      });
+      setReplyText("");
+      setShowReply(false);
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div
       className={`rounded-xl border p-3 transition-all ${
@@ -1183,6 +1260,14 @@ function CommentCard({
           </p>
           <div className="flex items-center gap-3 mt-2">
             <span className="text-[10px] text-muted">{formatTimeAgo(comment.createdAt)}</span>
+            {authorId && (
+              <button
+                onClick={() => setShowReply((s) => !s)}
+                className="text-[11px] font-medium text-muted hover:text-accent transition-colors"
+              >
+                Reply{replies.length ? ` (${replies.length})` : ""}
+              </button>
+            )}
             {canResolve && (
               <button
                 onClick={onResolve}
@@ -1196,6 +1281,43 @@ function CommentCard({
               </button>
             )}
           </div>
+
+          {/* Replies */}
+          {replies.length > 0 && (
+            <div className="mt-2.5 space-y-2 border-l-2 border-border pl-2.5">
+              {replies.map((r) => (
+                <div key={r.id} className="flex items-start gap-2">
+                  <div className="w-5 h-5 rounded-full bg-slate-300 flex items-center justify-center text-[8px] font-bold text-white shrink-0">
+                    {getInitials(r.authorName)}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[11px] font-semibold text-foreground">{r.authorName}</span>
+                    <p className="text-[11px] text-slate-600 leading-relaxed whitespace-pre-wrap">{r.text}</p>
+                    <span className="text-[9px] text-muted">{formatTimeAgo(r.createdAt)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showReply && authorId && (
+            <div className="mt-2 flex items-end gap-1.5">
+              <textarea
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                placeholder="Write a reply…"
+                rows={1}
+                className="flex-1 px-2.5 py-1.5 rounded-lg border border-border text-[11px] resize-none focus:outline-none focus:ring-2 focus:ring-accent/40"
+              />
+              <button
+                onClick={sendReply}
+                disabled={sending || !replyText.trim()}
+                className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-accent text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+              >
+                Send
+              </button>
+            </div>
+          )}
         </div>
         <button className="text-muted hover:text-foreground transition-colors shrink-0">
           <MoreHorizontal className="w-3.5 h-3.5" />
