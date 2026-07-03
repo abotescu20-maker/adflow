@@ -1,5 +1,6 @@
 import { getApps, initializeApp, cert, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { getAuth, type Auth } from "firebase-admin/auth";
 
 // Trusted server tier (02.07.2026). The client-only Firebase model has no place
 // to safely perform operations that must NOT be exposed to the browser — chiefly
@@ -40,4 +41,14 @@ function getAdminApp(): App {
 
 export function adminDb(): Firestore {
   return getFirestore(getAdminApp());
+}
+
+export function adminAuth(): Auth {
+  return getAuth(getAdminApp());
+}
+
+// Verify a Firebase ID token; returns the decoded token (uid + claims) or throws.
+export async function verifyIdToken(idToken: string | null | undefined) {
+  if (!idToken) throw new Error("Missing auth token");
+  return adminAuth().verifyIdToken(idToken);
 }

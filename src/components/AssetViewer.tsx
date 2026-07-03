@@ -52,6 +52,13 @@ import {
 } from "@/lib/firestore/assets";
 import { logActivity } from "@/lib/firestore/activity";
 import { createNotification } from "@/lib/firestore/notifications";
+import { useReviewRounds } from "@/hooks/useReviewRounds";
+import {
+  createReviewRound,
+  approveReviewRound,
+  rejectReviewRound,
+  closeReviewRound,
+} from "@/lib/firestore/reviewRounds";
 import type {
   Asset,
   AssetVersion,
@@ -104,7 +111,7 @@ function formatBytes(b?: number): string {
   return `${(b / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-type Tab = "comments" | "details" | "versions" | "activity";
+type Tab = "comments" | "details" | "versions" | "activity" | "rounds";
 
 interface Props {
   workspaceId: string;
@@ -512,6 +519,7 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
           <div className="flex border-b border-border">
             {([
               { k: "comments", label: `Comments (${comments.length})` },
+              { k: "rounds", label: "Rounds" },
               { k: "details", label: "Details" },
               { k: "versions", label: `Versions (${versions.length || 1})` },
               { k: "activity", label: "Activity" },
@@ -577,6 +585,15 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
               />
             )}
             {activeTab === "activity" && <ActivityTab entries={activity} />}
+            {activeTab === "rounds" && (
+              <ReviewRoundsTab
+                workspaceId={workspaceId}
+                campaignId={campaignId}
+                assetId={assetId}
+                currentVersion={asset.version || 1}
+                uid={user?.uid || null}
+              />
+            )}
           </div>
 
           {/* Comment input */}
@@ -934,6 +951,169 @@ function ActivityTab({ entries }: { entries: ActivityEntry[] }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// =========================================================================
+// Review Rounds tab — surfaces the reviewRounds backend (previously UI-less):
+// start a structured approval round for the current version, then reviewers
+// approve / request changes, and the owner can close it.
+// =========================================================================
+function ReviewRoundsTab({
+  workspaceId,
+  campaignId,
+  assetId,
+  currentVersion,
+  uid,
+}: {
+  workspaceId: string;
+  campaignId: string;
+  assetId: string;
+  currentVersion: number;
+  uid: string | null;
+}) {
+  const { rounds, loading } = useReviewRounds(workspaceId, campaignId, assetId);
+  const [busy, setBusy] = useState(false);
+  const [title, setTitle] = useState("");
+
+  const start = async () => {
+    if (!uid || busy) return;
+    setBusy(true);
+    try {
+      const nextNumber =
+        (rounds.reduce((m, r) => Math.max(m, r.roundNumber || 0), 0) || 0) + 1;
+      await createReviewRound(workspaceId, campaignId, assetId, {
+        version: currentVersion,
+        roundNumber: nextNumber,
+        title: title.trim() || `Review Round ${nextNumber}`,
+        reviewers: [],
+        createdBy: uid,
+      });
+      setTitle("");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const act = async (fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="p-4 space-y-3">
+      {uid && (
+        <div className="flex items-center gap-2">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={`Review Round (V${currentVersion})`}
+            className="flex-1 px-3 py-2 rounded-lg border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
+          />
+          <button
+            onClick={start}
+            disabled={busy}
+            className="px-3 py-2 rounded-lg text-xs font-semibold bg-accent text-white hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
+          >
+            Start
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="w-5 h-5 animate-spin text-accent" />
+        </div>
+      ) : rounds.length === 0 ? (
+        <div className="text-center py-8">
+          <p className="text-sm text-muted">No review rounds yet</p>
+          <p className="text-xs text-muted mt-1">
+            Start one to track sign-offs per version.
+          </p>
+        </div>
+      ) : (
+        rounds.map((r) => {
+          const approvals = Object.keys(r.approvals || {}).length;
+          const rejections = Object.keys(r.rejections || {}).length;
+          const mineApproved = uid ? !!r.approvals?.[uid] : false;
+          const mineRejected = uid ? !!r.rejections?.[uid] : false;
+          const open = r.status === "open";
+          return (
+            <div key={r.id} className="rounded-xl border border-border p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground truncate">{r.title}</p>
+                  <p className="text-[10px] text-muted">
+                    V{r.version} · Round {r.roundNumber} ·{" "}
+                    <span
+                      className={
+                        r.status === "completed"
+                          ? "text-emerald-600"
+                          : r.status === "canceled"
+                            ? "text-red-600"
+                            : "text-amber-600"
+                      }
+                    >
+                      {r.status}
+                    </span>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-muted shrink-0">
+                  <span className="text-emerald-600 font-semibold">{approvals} ✓</span>
+                  <span className="text-red-600 font-semibold">{rejections} ✗</span>
+                </div>
+              </div>
+
+              {open && uid && (
+                <div className="flex items-center gap-1.5 pt-1">
+                  <button
+                    onClick={() =>
+                      act(() => rejectReviewRound(workspaceId, campaignId, assetId, r.id, uid, "Changes requested"))
+                    }
+                    disabled={busy}
+                    className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors disabled:opacity-40 ${
+                      mineRejected
+                        ? "bg-red-50 border-red-200 text-red-600"
+                        : "bg-white border-border text-red-600 hover:bg-red-50"
+                    }`}
+                  >
+                    Request changes
+                  </button>
+                  <button
+                    onClick={() =>
+                      act(() => approveReviewRound(workspaceId, campaignId, assetId, r.id, uid))
+                    }
+                    disabled={busy}
+                    className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-40 ${
+                      mineApproved
+                        ? "bg-emerald-600 text-white"
+                        : "bg-emerald-500 text-white hover:bg-emerald-600"
+                    }`}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={() =>
+                      act(() => closeReviewRound(workspaceId, campaignId, assetId, r.id, "completed"))
+                    }
+                    disabled={busy}
+                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-white border border-border text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40"
+                    title="Close round"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }
