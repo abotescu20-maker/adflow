@@ -33,10 +33,13 @@ import {
   deleteAsset,
   updateAssetStatus,
   setAssetTags,
+  updateAsset,
 } from "@/lib/firestore/assets";
 import { decrementCampaignAssetsCount } from "@/lib/firestore/campaigns";
 import { logActivity } from "@/lib/firestore/activity";
 import { useToast } from "@/components/Toast";
+import { upload } from "@vercel/blob/client";
+import { thumbnailFromVideoUrl, thumbnailFromImageUrl } from "@/lib/thumbnails";
 import type { Asset, ApprovalStatus } from "@/lib/schema";
 
 const FOLDERS = [
@@ -118,6 +121,51 @@ export default function AssetBrowser({
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
+
+  const missingThumbs = useMemo(
+    () =>
+      assets.filter(
+        (a) =>
+          !a.thumbnailURL &&
+          (a.type === "video" || a.type === "image") &&
+          (a.downloadURL || a.storagePath)
+      ),
+    [assets]
+  );
+
+  const backfillThumbnails = async () => {
+    if (!user || backfilling || missingThumbs.length === 0) return;
+    setBackfilling(true);
+    let done = 0;
+    try {
+      for (const a of missingThumbs) {
+        const url = a.downloadURL || a.storagePath;
+        const blob =
+          a.type === "video"
+            ? await thumbnailFromVideoUrl(url)
+            : await thumbnailFromImageUrl(url);
+        if (!blob || blob.size === 0) continue;
+        const idToken = await user.getIdToken();
+        const path = `workspaces/${workspaceId}/campaigns/${campaignId}/${a.folder}/thumbnails/backfill-${a.id}.jpg`;
+        const res = await upload(path, new File([blob], `thumb-${a.id}.jpg`, { type: "image/jpeg" }), {
+          access: "public",
+          handleUploadUrl: "/api/upload",
+          clientPayload: idToken,
+        });
+        await updateAsset(workspaceId, campaignId, a.id, { thumbnailURL: res.url });
+        done++;
+      }
+      toast.success(
+        `Generated ${done} thumbnail${done !== 1 ? "s" : ""}`,
+        done < missingThumbs.length ? `${missingThumbs.length - done} could not be generated.` : undefined
+      );
+    } catch {
+      toast.error("Thumbnail backfill failed", "Some thumbnails may not have generated.");
+    } finally {
+      setBackfilling(false);
+    }
+  };
 
   // Filter state
   const [showFilters, setShowFilters] = useState(false);
@@ -349,6 +397,21 @@ export default function AssetBrowser({
               <Share2 className="w-3.5 h-3.5" />
               Share
             </button>
+            {missingThumbs.length > 0 && (
+              <button
+                onClick={backfillThumbnails}
+                disabled={backfilling}
+                title={`Generate previews for ${missingThumbs.length} asset(s) without a thumbnail`}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium text-slate-600 border border-border bg-white hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {backfilling ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <ImageIcon className="w-3.5 h-3.5" />
+                )}
+                {backfilling ? "Generating…" : `Thumbnails (${missingThumbs.length})`}
+              </button>
+            )}
             <button
               onClick={() => setUploadOpen(true)}
               className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors shadow-sm shadow-accent/20"

@@ -17,6 +17,7 @@ import {
   Eye,
   Lock,
   MoreHorizontal,
+  Columns,
   Download,
   Share2,
   CheckCircle,
@@ -68,6 +69,7 @@ import type {
 } from "@/lib/schema";
 import ShareLinkModal from "@/components/ShareLinkModal";
 import UploadDialog from "@/components/UploadDialog";
+import VersionCompare from "@/components/VersionCompare";
 import { useToast } from "@/components/Toast";
 
 function formatTimecode(seconds: number): string {
@@ -167,6 +169,7 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
   const [approving, setApproving] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [newVersionOpen, setNewVersionOpen] = useState(false);
+  const [showCompare, setShowCompare] = useState(false);
 
   const duration = asset?.durationSeconds || 0;
   const currentTimecode = formatTimecode(currentTime);
@@ -338,6 +341,15 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
           </div>
         </div>
         <div className="flex items-center gap-2.5">
+          {versions.some((v) => v.version < asset.version) && (
+            <button
+              onClick={() => setShowCompare(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 border border-border bg-white hover:bg-slate-50 transition-colors shadow-sm"
+            >
+              <Columns className="w-3.5 h-3.5" />
+              Compare
+            </button>
+          )}
           <button
             onClick={() => setNewVersionOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 border border-border bg-white hover:bg-slate-50 transition-colors shadow-sm"
@@ -713,6 +725,13 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
           onClose={() => setNewVersionOpen(false)}
           forcedName={asset.name}
           forcedFolder={asset.folder}
+        />
+      )}
+      {showCompare && (
+        <VersionCompare
+          asset={asset}
+          versions={versions}
+          onClose={() => setShowCompare(false)}
         />
       )}
     </div>
