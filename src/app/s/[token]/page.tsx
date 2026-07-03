@@ -2,16 +2,6 @@
 
 import { use, useEffect, useState } from "react";
 import {
-  doc,
-  getDoc,
-  collection,
-  getDocs,
-  query,
-  orderBy,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { recordShareLinkView } from "@/lib/firestore/shareLinks";
-import {
   Lock,
   Loader2,
   AlertTriangle,
@@ -80,72 +70,28 @@ export default function PublicSharePage({
     let cancelled = false;
     (async () => {
       try {
-        const shareDoc = await getDoc(doc(db, "publicShares", token));
-        if (!shareDoc.exists()) {
-          if (!cancelled) setState({ kind: "error", message: "Link not found" });
+        // Resolve the share via the trusted server tier. The client SDK CANNOT read
+        // the workspace's assets (Firestore rules forbid anonymous reads), so the
+        // server (Admin SDK) validates the token and returns only the shared assets.
+        const res = await fetch(`/api/share/${token}`, { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok) {
+          const msg =
+            res.status === 410
+              ? data.error || "This link has expired or was revoked"
+              : res.status === 404
+                ? "Link not found"
+                : data.error || "Unable to load share";
+          if (!cancelled) setState({ kind: "error", message: msg });
           return;
         }
-        const share = { token, ...shareDoc.data() } as unknown as PublicShare;
-        if (share.revokedAt) {
-          if (!cancelled) setState({ kind: "error", message: "This link has been revoked" });
-          return;
-        }
-        if (share.expiresAt) {
-          const ms =
-            typeof share.expiresAt.toMillis === "function"
-              ? share.expiresAt.toMillis()
-              : 0;
-          if (ms < Date.now()) {
-            if (!cancelled) setState({ kind: "error", message: "This link has expired" });
-            return;
-          }
-        }
-
-        let campaign: Campaign | null = null;
-        let assets: Asset[] = [];
-
-        if (share.assetIds && share.assetIds.length > 0 && share.campaignId) {
-          const arr: Asset[] = [];
-          for (const aid of share.assetIds) {
-            const aDoc = await getDoc(
-              doc(
-                db,
-                "workspaces",
-                share.workspaceId,
-                "campaigns",
-                share.campaignId,
-                "assets",
-                aid
-              )
-            );
-            if (aDoc.exists()) arr.push({ id: aDoc.id, ...aDoc.data() } as Asset);
-          }
-          assets = arr;
-        } else if (share.campaignId) {
-          const cDoc = await getDoc(
-            doc(db, "workspaces", share.workspaceId, "campaigns", share.campaignId)
-          );
-          if (cDoc.exists()) campaign = { id: cDoc.id, ...cDoc.data() } as Campaign;
-          const aSnap = await getDocs(
-            query(
-              collection(
-                db,
-                "workspaces",
-                share.workspaceId,
-                "campaigns",
-                share.campaignId,
-                "assets"
-              ),
-              orderBy("createdAt", "desc")
-            )
-          );
-          assets = aSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Asset));
-        }
-
         if (!cancelled) {
-          setState({ kind: "ready", share, campaign, assets });
-          // Fire-and-forget view recording (may silently fail due to rules)
-          recordShareLinkView(share.workspaceId, share.shareLinkId).catch(() => {});
+          setState({
+            kind: "ready",
+            share: data.share as PublicShare,
+            campaign: (data.campaign as Campaign) ?? null,
+            assets: (data.assets as Asset[]) ?? [],
+          });
         }
       } catch (err) {
         console.error(err);
