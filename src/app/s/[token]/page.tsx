@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useState, useRef, useCallback } from "react";
 import {
   Lock,
   Loader2,
@@ -12,9 +12,9 @@ import {
   Music,
   FileText,
   Image as ImageIcon,
-  Play,
-  Pause,
   Zap,
+  MessageSquare,
+  Clock,
 } from "lucide-react";
 import type { Asset, Campaign } from "@/lib/schema";
 
@@ -32,6 +32,20 @@ interface PublicShare {
   };
   expiresAt: { toMillis: () => number } | null;
   revokedAt: { toMillis: () => number } | null;
+}
+
+interface ShareComment {
+  id: string;
+  authorName: string;
+  text: string;
+  timecode: number | null;
+  isDecision: boolean;
+}
+
+function formatTc(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
 export default function PublicSharePage({
@@ -58,6 +72,34 @@ export default function PublicSharePage({
   const [commentText, setCommentText] = useState("");
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+  const [comments, setComments] = useState<ShareComment[]>([]);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const loadComments = useCallback(
+    async (assetId: string) => {
+      try {
+        const res = await fetch(
+          `/api/share/${token}/comments?assetId=${encodeURIComponent(assetId)}`,
+          { cache: "no-store" }
+        );
+        if (res.ok) {
+          const d = await res.json();
+          setComments((d.comments as ShareComment[]) || []);
+        }
+      } catch {
+        /* comments are non-essential to the page */
+      }
+    },
+    [token]
+  );
+
+  function seekTo(seconds: number) {
+    const v = videoRef.current;
+    if (v && isFinite(seconds)) {
+      v.currentTime = seconds;
+      v.play().catch(() => {});
+    }
+  }
 
   useEffect(() => {
     try {
@@ -65,6 +107,13 @@ export default function PublicSharePage({
       if (saved) setGuestName(saved);
     } catch {}
   }, []);
+
+  // Load the public comment thread whenever the resolved share/active asset changes.
+  useEffect(() => {
+    if (state.kind !== "ready") return;
+    const a = state.assets[activeIndex];
+    if (a) loadComments(a.id);
+  }, [state, activeIndex, loadComments]);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,6 +190,10 @@ export default function PublicSharePage({
     setFlash(null);
     try {
       rememberName();
+      const tc =
+        videoRef.current && isFinite(videoRef.current.currentTime)
+          ? videoRef.current.currentTime
+          : undefined;
       const res = await fetch(`/api/share/${token}/comment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -148,12 +201,14 @@ export default function PublicSharePage({
           assetId: asset.id,
           text: commentText.trim(),
           guestName: guestName.trim(),
+          timecode: tc,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to post comment");
       setCommentText("");
       setFlash({ kind: "ok", msg: "Comment sent to the team ✓" });
+      loadComments(asset.id);
     } catch (e) {
       setFlash({ kind: "err", msg: e instanceof Error ? e.message : "Failed" });
     } finally {
@@ -184,6 +239,7 @@ export default function PublicSharePage({
         kind: "ok",
         msg: decision === "approved" ? "Approved ✓ — the team was notified" : "Changes requested ✓",
       });
+      loadComments(asset.id);
     } catch (e) {
       setFlash({ kind: "err", msg: e instanceof Error ? e.message : "Failed" });
     } finally {
@@ -213,7 +269,7 @@ export default function PublicSharePage({
       </header>
 
       {/* Layout */}
-      <div className="flex-1 flex">
+      <div className="flex-1 flex flex-col md:flex-row min-h-0">
         {/* Asset list sidebar */}
         {assets.length > 1 && (
           <aside className="w-60 border-r border-border bg-white p-3 overflow-y-auto">
@@ -247,7 +303,7 @@ export default function PublicSharePage({
           {asset ? (
             <>
               <div className="flex-1 bg-slate-900 relative flex items-center justify-center overflow-hidden">
-                <MediaPreview asset={asset} />
+                <MediaPreview asset={asset} videoRef={videoRef} />
                 <div className="absolute top-4 left-4 px-2.5 py-1 rounded-lg bg-accent text-white text-xs font-bold shadow-lg">
                   V{asset.version}
                 </div>
@@ -349,6 +405,57 @@ export default function PublicSharePage({
             </div>
           )}
         </main>
+
+        {/* Comments thread — the reviewer sees feedback + decisions, with clickable
+            timecodes that seek the video (frame.io-style). */}
+        {asset && (share.permissions.canComment || comments.length > 0) && (
+          <aside className="w-full md:w-80 border-t md:border-t-0 md:border-l border-border bg-white flex flex-col max-h-[40vh] md:max-h-none">
+            <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-accent" />
+              <h3 className="text-sm font-semibold text-foreground">
+                Comments {comments.length > 0 ? `(${comments.length})` : ""}
+              </h3>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+              {comments.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-muted">No comments yet</p>
+                  <p className="text-xs text-muted mt-1">
+                    Be the first to leave feedback.
+                  </p>
+                </div>
+              ) : (
+                comments.map((c) => (
+                  <div
+                    key={c.id}
+                    className={`rounded-xl border p-2.5 ${
+                      c.isDecision ? "border-accent/30 bg-accent-light/40" : "border-border"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-xs font-semibold text-foreground truncate">
+                        {c.authorName}
+                      </span>
+                      {c.timecode != null && (
+                        <button
+                          onClick={() => seekTo(c.timecode as number)}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-accent-light text-accent text-[10px] font-mono font-semibold hover:bg-accent hover:text-white transition-colors shrink-0"
+                          title="Jump to this moment"
+                        >
+                          <Clock className="w-2.5 h-2.5" />
+                          {formatTc(c.timecode)}
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">
+                      {c.text}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </aside>
+        )}
       </div>
 
       <footer className="bg-white border-t border-border px-6 py-2.5 flex items-center justify-between text-[11px] text-muted">
@@ -376,8 +483,13 @@ function AssetTypeIcon({ type }: { type: Asset["type"] }) {
   return <FileText className={cls} />;
 }
 
-function MediaPreview({ asset }: { asset: Asset }) {
-  const [isPlaying, setIsPlaying] = useState(false);
+function MediaPreview({
+  asset,
+  videoRef,
+}: {
+  asset: Asset;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+}) {
   const src = asset.downloadURL || asset.storagePath;
   if (!src) {
     return (
@@ -390,14 +502,12 @@ function MediaPreview({ asset }: { asset: Asset }) {
   if (asset.type === "video") {
     return (
       <video
+        ref={videoRef}
         src={src}
         controls
+        playsInline
         className="max-w-full max-h-full"
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-      >
-        {isPlaying ? <Pause /> : <Play />}
-      </video>
+      />
     );
   }
   if (asset.type === "image") {
