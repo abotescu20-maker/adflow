@@ -323,7 +323,10 @@ export default function PublicSharePage({
               <div className="bg-white border-t border-border px-6 py-3 space-y-3">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <h4 className="text-sm font-semibold text-foreground truncate">{asset.name}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-semibold text-foreground truncate">{asset.name}</h4>
+                      <ReviewStatusBadge status={asset.status} />
+                    </div>
                     <p className="text-[11px] text-muted">
                       {asset.width && asset.height ? `${asset.width}×${asset.height}` : ""}
                       {asset.durationSeconds ? ` · ${Math.round(asset.durationSeconds)}s` : ""}
@@ -473,6 +476,31 @@ function permissionsSummary(p: PublicShare["permissions"]): string {
   if (p.canApprove) parts.push("Approve");
   if (p.canDownload) parts.push("Download");
   return parts.join(" · ") || "View only";
+}
+
+function ReviewStatusBadge({ status }: { status?: Asset["status"] }) {
+  if (status === "approved") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 text-[10px] font-semibold shrink-0">
+        <CheckCircle className="w-3 h-3" /> Approved
+      </span>
+    );
+  }
+  if (status === "changes_requested" || status === "revision") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-50 text-red-600 text-[10px] font-semibold shrink-0">
+        <XCircle className="w-3 h-3" /> Changes requested
+      </span>
+    );
+  }
+  if (status === "in_review") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-600 text-[10px] font-semibold shrink-0">
+        In review
+      </span>
+    );
+  }
+  return null;
 }
 
 function AssetTypeIcon({ type }: { type: Asset["type"] }) {
