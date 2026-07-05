@@ -478,7 +478,9 @@ function permissionsSummary(p: PublicShare["permissions"]): string {
   return parts.join(" · ") || "View only";
 }
 
-function ReviewStatusBadge({ status }: { status?: Asset["status"] }) {
+// status is widened to string: the approve flow writes "approved"/"changes_requested"
+// at runtime, which the narrower schema Asset["status"] union doesn't include.
+function ReviewStatusBadge({ status }: { status?: string }) {
   if (status === "approved") {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 text-[10px] font-semibold shrink-0">
