@@ -1,39 +1,17 @@
 import { adminDb } from "@/lib/firebase-admin";
+import { ShareAuthError, toMillis, type ResolvedShare } from "@/lib/share-auth";
 
-// Server-side authorization for the public share flow. The Admin SDK bypasses
-// Firestore rules, so this is the ONLY gate for guest (unauthenticated) writes —
-// it must be strict. Resolves a share token to its scope + permissions, or throws
-// a ShareAuthError carrying an HTTP status.
+// Re-export the pure helpers so existing route imports keep working.
+export {
+  ShareAuthError,
+  assertAssetInShare,
+  cleanText,
+  type ResolvedShare,
+} from "@/lib/share-auth";
 
-export class ShareAuthError extends Error {
-  status: number;
-  constructor(message: string, status = 403) {
-    super(message);
-    this.status = status;
-  }
-}
-
-export interface ResolvedShare {
-  token: string;
-  workspaceId: string;
-  campaignId: string | null;
-  assetIds: string[];
-  permissions: {
-    canView?: boolean;
-    canComment?: boolean;
-    canApprove?: boolean;
-    canDownload?: boolean;
-  };
-}
-
-function toMillis(v: unknown): number | null {
-  if (!v) return null;
-  const anyV = v as { toMillis?: () => number };
-  if (typeof anyV.toMillis === "function") return anyV.toMillis();
-  if (v instanceof Date) return v.getTime();
-  return null;
-}
-
+// Resolve a share token to its scope + permissions (touches Firestore via the
+// Admin SDK). The pure authorization helpers live in share-auth.ts. This is the
+// ONLY gate for guest (unauthenticated) writes, so it must be strict.
 export async function resolveShare(token: string): Promise<ResolvedShare> {
   if (!token || typeof token !== "string" || token.length < 8) {
     throw new ShareAuthError("Invalid share token", 400);
@@ -57,32 +35,4 @@ export async function resolveShare(token: string): Promise<ResolvedShare> {
     assetIds: Array.isArray(d.assetIds) ? (d.assetIds as string[]) : [],
     permissions: (d.permissions as ResolvedShare["permissions"]) ?? {},
   };
-}
-
-// Verify the target asset is actually covered by this share (either explicitly
-// listed, or — for a campaign-wide share with no asset list — under its campaign).
-// Returns the campaignId to write under.
-export function assertAssetInShare(share: ResolvedShare, assetId: string): string {
-  if (!assetId || typeof assetId !== "string") {
-    throw new ShareAuthError("Missing assetId", 400);
-  }
-  if (share.assetIds.length > 0 && !share.assetIds.includes(assetId)) {
-    throw new ShareAuthError("Asset is not part of this share", 403);
-  }
-  if (!share.campaignId) {
-    throw new ShareAuthError("Share has no campaign scope", 400);
-  }
-  return share.campaignId;
-}
-
-// Trim + cap guest-supplied strings, dropping ASCII control characters, before
-// they touch the DB. (React escapes on render; this is defense-in-depth.)
-export function cleanText(v: unknown, max: number): string {
-  const s = String(v ?? "");
-  let out = "";
-  for (const ch of s) {
-    const code = ch.charCodeAt(0);
-    if (code >= 32 && code !== 127) out += ch;
-  }
-  return out.trim().slice(0, max);
 }
