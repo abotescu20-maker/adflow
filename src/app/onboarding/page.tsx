@@ -34,7 +34,9 @@ export default function OnboardingPage() {
       await createWorkspace(name.trim(), brand.trim() || undefined);
       router.replace("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create workspace");
+      setError(
+        err instanceof Error ? err.message : "Failed to create workspace"
+      );
       setBusy(false);
     }
   };
@@ -55,8 +57,10 @@ export default function OnboardingPage() {
             <Zap className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight">AdFlow</h1>
-            <p className="text-[11px] text-muted font-medium">Post-Production</p>
+            <h1 className="text-lg font-bold tracking-tight">Black Frame</h1>
+            <p className="text-[11px] text-muted font-medium">
+              Post-Production
+            </p>
           </div>
         </div>
 
@@ -121,8 +125,9 @@ export default function OnboardingPage() {
 
           <div className="mt-6 pt-5 border-t border-border">
             <p className="text-[11px] text-muted leading-relaxed">
-              Your workspace starts on the <strong className="text-foreground">Free plan</strong> with
-              5 members, 3 campaigns and 2 GB of storage. Upgrade anytime.
+              Your workspace starts on the{" "}
+              <strong className="text-foreground">Free plan</strong> with 5
+              members, 3 campaigns and 2 GB of storage. Upgrade anytime.
             </p>
           </div>
         </div>

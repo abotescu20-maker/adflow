@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AdFlow — Post-Production Automation",
+  title: "Black Frame — Post-Production Automation",
   description: "Streamline your advertising post-production workflow",
 };
 

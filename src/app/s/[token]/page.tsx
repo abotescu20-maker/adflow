@@ -12,10 +12,10 @@ import {
   Music,
   FileText,
   Image as ImageIcon,
-  Zap,
   MessageSquare,
   Clock,
 } from "lucide-react";
+import { BlackMariaMark } from "@/components/BlackMariaLogo";
 import type { Asset, Campaign } from "@/lib/schema";
 
 interface PublicShare {
@@ -71,7 +71,10 @@ export default function PublicSharePage({
   const [guestName, setGuestName] = useState("");
   const [commentText, setCommentText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [flash, setFlash] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+  const [flash, setFlash] = useState<{
+    kind: "ok" | "err";
+    msg: string;
+  } | null>(null);
   const [comments, setComments] = useState<ShareComment[]>([]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -144,7 +147,8 @@ export default function PublicSharePage({
         }
       } catch (err) {
         console.error(err);
-        if (!cancelled) setState({ kind: "error", message: "Unable to load share" });
+        if (!cancelled)
+          setState({ kind: "error", message: "Unable to load share" });
       }
     })();
     return () => {
@@ -168,7 +172,8 @@ export default function PublicSharePage({
           </div>
           <h2 className="text-lg font-semibold mb-2">{state.message}</h2>
           <p className="text-sm text-muted">
-            This link may have been revoked or expired. Contact the sender for a new link.
+            This link may have been revoked or expired. Contact the sender for a
+            new link.
           </p>
         </div>
       </div>
@@ -180,7 +185,8 @@ export default function PublicSharePage({
 
   function rememberName() {
     try {
-      if (guestName.trim()) localStorage.setItem("adflow_guest_name", guestName.trim());
+      if (guestName.trim())
+        localStorage.setItem("adflow_guest_name", guestName.trim());
     } catch {}
   }
 
@@ -237,7 +243,10 @@ export default function PublicSharePage({
       setCommentText("");
       setFlash({
         kind: "ok",
-        msg: decision === "approved" ? "Approved ✓ — the team was notified" : "Changes requested ✓",
+        msg:
+          decision === "approved"
+            ? "Approved ✓ — the team was notified"
+            : "Changes requested ✓",
       });
       loadComments(asset.id);
     } catch (e) {
@@ -252,11 +261,13 @@ export default function PublicSharePage({
       {/* Header */}
       <header className="bg-white border-b border-border px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center">
-            <Zap className="w-4 h-4 text-white" />
-          </div>
+          <span className="text-foreground">
+            <BlackMariaMark className="w-7 h-7" />
+          </span>
           <div>
-            <h1 className="text-sm font-bold text-foreground">AdFlow Review</h1>
+            <h1 className="text-sm font-bold text-foreground">
+              Black Frame Review
+            </h1>
             <p className="text-[11px] text-muted">
               {campaign?.name || asset?.name || "Client review"}
             </p>
@@ -324,15 +335,22 @@ export default function PublicSharePage({
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-semibold text-foreground truncate">{asset.name}</h4>
+                      <h4 className="text-sm font-semibold text-foreground truncate">
+                        {asset.name}
+                      </h4>
                       <ReviewStatusBadge status={asset.status} />
                     </div>
                     <p className="text-[11px] text-muted">
-                      {asset.width && asset.height ? `${asset.width}×${asset.height}` : ""}
-                      {asset.durationSeconds ? ` · ${Math.round(asset.durationSeconds)}s` : ""}
+                      {asset.width && asset.height
+                        ? `${asset.width}×${asset.height}`
+                        : ""}
+                      {asset.durationSeconds
+                        ? ` · ${Math.round(asset.durationSeconds)}s`
+                        : ""}
                     </p>
                   </div>
-                  {(share.permissions.canComment || share.permissions.canApprove) && (
+                  {(share.permissions.canComment ||
+                    share.permissions.canApprove) && (
                     <input
                       value={guestName}
                       onChange={(e) => setGuestName(e.target.value)}
@@ -342,7 +360,8 @@ export default function PublicSharePage({
                   )}
                 </div>
 
-                {(share.permissions.canComment || share.permissions.canApprove) && (
+                {(share.permissions.canComment ||
+                  share.permissions.canApprove) && (
                   <div className="flex items-end gap-2">
                     <textarea
                       value={commentText}
@@ -362,7 +381,9 @@ export default function PublicSharePage({
                           disabled={busy || !commentText.trim()}
                           className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-border text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-40"
                         >
-                          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                          {busy ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : null}
                           Send comment
                         </button>
                       )}
@@ -432,7 +453,9 @@ export default function PublicSharePage({
                   <div
                     key={c.id}
                     className={`rounded-xl border p-2.5 ${
-                      c.isDecision ? "border-accent/30 bg-accent-light/40" : "border-border"
+                      c.isDecision
+                        ? "border-accent/30 bg-accent-light/40"
+                        : "border-border"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2 mb-1">
@@ -462,7 +485,7 @@ export default function PublicSharePage({
       </div>
 
       <footer className="bg-white border-t border-border px-6 py-2.5 flex items-center justify-between text-[11px] text-muted">
-        <span>Powered by AdFlow</span>
+        <span>Powered by Black Frame</span>
         <span>Permissions: {permissionsSummary(share.permissions)}</span>
       </footer>
     </div>
@@ -542,7 +565,13 @@ function MediaPreview({
   }
   if (asset.type === "image") {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt={asset.name} className="max-w-full max-h-full object-contain" />;
+    return (
+      <img
+        src={src}
+        alt={asset.name}
+        className="max-w-full max-h-full object-contain"
+      />
+    );
   }
   if (asset.type === "audio") {
     return (

@@ -1,23 +1,24 @@
 @import "tailwindcss";
 
+/* Black Frame theme (17.07.2026): black background, typewriter/monospace, mono-brand. */
 :root {
-  --background: #ffffff;
-  --foreground: #1a1a2e;
-  --sidebar-bg: #f8f9fc;
-  --card-bg: #ffffff;
-  --card-hover: #f3f4f8;
-  --border: #e5e7f0;
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-light: #eef2ff;
-  --success: #10b981;
-  --success-light: #ecfdf5;
-  --warning: #f59e0b;
-  --warning-light: #fffbeb;
-  --danger: #ef4444;
-  --danger-light: #fef2f2;
-  --muted: #94a3b8;
-  --subtle: #f1f5f9;
+  --background: #000000;
+  --foreground: #ededed;
+  --sidebar-bg: #0a0a0a;
+  --card-bg: #0f0f0f;
+  --card-hover: #1a1a1a;
+  --border: #2a2a2a;
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+  --accent-light: #1e1b3a;
+  --success: #34d399;
+  --success-light: #0e241b;
+  --warning: #fbbf24;
+  --warning-light: #241d0c;
+  --danger: #f87171;
+  --danger-light: #241111;
+  --muted: #8a8a8a;
+  --subtle: #141414;
 }
 
 @theme inline {
@@ -45,7 +46,54 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  /* Typewriter / monospace everywhere (Black Frame brand). */
+  font-family:
+    var(--font-mono), "Courier New", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* ── Dark-theme remap for components that hardcode Tailwind light colors ──
+   The app was built light-first with bg-white / text-slate-* / bg-slate-50.
+   Remap those to the dark palette so the whole UI goes black cohesively,
+   WITHOUT touching intentionally-dark spots (bg-slate-900 = the video letterbox). */
+.bg-white {
+  background-color: var(--card-bg) !important;
+}
+.bg-slate-50,
+.bg-slate-100,
+.bg-gray-50,
+.bg-gray-100 {
+  background-color: var(--subtle) !important;
+}
+.text-slate-900,
+.text-slate-800,
+.text-slate-700,
+.text-gray-900,
+.text-gray-800,
+.text-foreground {
+  color: var(--foreground) !important;
+}
+.text-slate-600,
+.text-slate-500,
+.text-gray-600,
+.text-gray-500 {
+  color: #b4b4b4 !important;
+}
+.border-slate-200,
+.border-slate-100,
+.border-gray-200,
+.border-gray-100 {
+  border-color: var(--border) !important;
+}
+/* Inputs/textareas often default to white bg + dark text */
+input,
+textarea,
+select {
+  background-color: transparent;
+  color: var(--foreground);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
 }
 
 /* Elegant scrollbar */
@@ -82,7 +130,7 @@ body {
   position: relative;
 }
 .timeline-progress::after {
-  content: '';
+  content: "";
   position: absolute;
   right: -6px;
   top: 50%;
@@ -92,7 +140,7 @@ body {
   background: var(--accent);
   border: 2px solid white;
   border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
   opacity: 0;
   transition: opacity 0.15s;
 }

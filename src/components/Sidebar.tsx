@@ -68,7 +68,8 @@ export default function Sidebar({
   onOpenSearch,
 }: SidebarProps) {
   const { profile, signOut } = useAuth();
-  const { activeWorkspace, workspaces, setActiveWorkspaceId, currentRole } = useWorkspace();
+  const { activeWorkspace, workspaces, setActiveWorkspaceId, currentRole } =
+    useWorkspace();
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const folderCounts = useFolderCounts(activeWorkspace?.id ?? null);
 
@@ -92,10 +93,12 @@ export default function Sidebar({
           </div>
           <div className="flex-1 min-w-0 text-left">
             <h1 className="text-[13px] font-bold tracking-tight text-foreground truncate">
-              {activeWorkspace?.name || "AdFlow"}
+              {activeWorkspace?.name || "Black Frame"}
             </h1>
             <p className="text-[11px] text-muted font-medium truncate">
-              {currentRole ? currentRole.charAt(0).toUpperCase() + currentRole.slice(1) : "Post-Production"}
+              {currentRole
+                ? currentRole.charAt(0).toUpperCase() + currentRole.slice(1)
+                : "Post-Production"}
             </p>
           </div>
           <ChevronDown
@@ -174,7 +177,8 @@ export default function Sidebar({
               onNavigate(item.key as View);
             }}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${
-              currentView === item.key && (item.key !== "assets" || !selectedFolder)
+              currentView === item.key &&
+              (item.key !== "assets" || !selectedFolder)
                 ? "bg-accent text-white shadow-sm shadow-accent/25"
                 : "text-slate-600 hover:text-foreground hover:bg-white"
             }`}
@@ -192,7 +196,8 @@ export default function Sidebar({
         </p>
         {FOLDERS.map((folder) => {
           const Icon = iconMap[folder.icon] || FolderOpen;
-          const isSelected = currentView === "assets" && selectedFolder === folder.id;
+          const isSelected =
+            currentView === "assets" && selectedFolder === folder.id;
           const count = folderCounts[folder.id] || 0;
           return (
             <button
@@ -209,7 +214,9 @@ export default function Sidebar({
               {count > 0 && (
                 <span
                   className={`text-[11px] px-1.5 py-0.5 rounded-md ${
-                    isSelected ? "bg-accent/10 text-accent" : "bg-slate-100 text-slate-400"
+                    isSelected
+                      ? "bg-accent/10 text-accent"
+                      : "bg-slate-100 text-slate-400"
                   }`}
                 >
                   {count}

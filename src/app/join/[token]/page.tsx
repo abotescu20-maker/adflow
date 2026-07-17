@@ -36,7 +36,10 @@ export default function JoinPage({
         setState({ kind: "done", workspaceName: data.workspaceName ?? null });
         setTimeout(() => router.push("/"), 1500);
       } catch (e) {
-        setState({ kind: "error", message: e instanceof Error ? e.message : "Failed to join" });
+        setState({
+          kind: "error",
+          message: e instanceof Error ? e.message : "Failed to join",
+        });
       }
     })();
   }, [loading, user, state.kind, token, router]);
@@ -57,7 +60,9 @@ export default function JoinPage({
 
         {!loading && !user && (
           <>
-            <h1 className="text-lg font-semibold mb-2">You&apos;ve been invited to AdFlow</h1>
+            <h1 className="text-lg font-semibold mb-2">
+              You&apos;ve been invited to Black Frame
+            </h1>
             <p className="text-sm text-muted mb-5">
               Sign in to accept your invitation and join the workspace.
             </p>
@@ -96,7 +101,7 @@ export default function JoinPage({
               onClick={() => router.push("/")}
               className="text-sm font-medium text-accent hover:underline"
             >
-              Go to AdFlow
+              Go to Black Frame
             </button>
           </>
         )}

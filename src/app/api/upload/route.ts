@@ -1,5 +1,6 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
+import { adminDb } from "@/lib/firebase-admin";
 
 // SECURITY (02.07.2026, H4): this route previously minted a Vercel Blob upload
 // token for ANY request — the comment claimed the client was authenticated but
@@ -11,7 +12,8 @@ import { NextResponse } from "next/server";
 async function verifyFirebaseIdToken(idToken: string | null): Promise<string> {
   if (!idToken) throw new Error("Unauthorized: missing auth token");
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-  if (!apiKey) throw new Error("Server misconfigured: missing Firebase API key");
+  if (!apiKey)
+    throw new Error("Server misconfigured: missing Firebase API key");
   const res = await fetch(
     `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
     {
@@ -39,11 +41,23 @@ export async function POST(request: Request): Promise<NextResponse> {
         // as clientPayload (see UploadDialog). Throwing here fails the request
         // before any upload token is generated.
         const uid = await verifyFirebaseIdToken(clientPayload);
-        // Defense-in-depth: only allow uploads into the workspace-scoped path
-        // shape the app uses. (Full per-workspace membership enforcement needs the
-        // Admin SDK — tracked as a P1 follow-up.)
-        if (!pathname.startsWith("workspaces/")) {
+        // Path must be workspace-scoped: workspaces/{workspaceId}/...
+        const parts = pathname.split("/");
+        if (parts[0] !== "workspaces" || !parts[1]) {
           throw new Error("Forbidden: upload path must be workspace-scoped");
+        }
+        const workspaceId = parts[1];
+        // SECURITY (05.07.2026): the caller must be a MEMBER of that workspace —
+        // an authenticated user must not be able to upload into someone else's
+        // workspace by crafting the pathname. (Previously only auth was checked.)
+        const member = await adminDb()
+          .collection("workspaces")
+          .doc(workspaceId)
+          .collection("members")
+          .doc(uid)
+          .get();
+        if (!member.exists) {
+          throw new Error("Forbidden: not a member of this workspace");
         }
         return {
           allowedContentTypes: [
