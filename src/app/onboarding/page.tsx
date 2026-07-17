@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Zap, Loader2, Building2 } from "lucide-react";
+import { Loader2, Building2 } from "lucide-react";
+import { BlackMariaMark } from "@/components/BlackMariaLogo";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
 
@@ -53,9 +54,9 @@ export default function OnboardingPage() {
     <div className="min-h-screen flex items-center justify-center bg-subtle/30 px-4">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-2.5 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center shadow-sm">
-            <Zap className="w-5 h-5 text-white" />
-          </div>
+          <span className="text-foreground">
+            <BlackMariaMark className="w-10 h-10" />
+          </span>
           <div>
             <h1 className="text-lg font-bold tracking-tight">Black Frame</h1>
             <p className="text-[11px] text-muted font-medium">

@@ -3,7 +3,8 @@
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { Loader2, CheckCircle, AlertTriangle, Zap } from "lucide-react";
+import { Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { BlackMariaMark } from "@/components/BlackMariaLogo";
 
 export default function JoinPage({
   params,
@@ -47,9 +48,9 @@ export default function JoinPage({
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
       <div className="max-w-sm w-full text-center bg-white rounded-2xl border border-border p-8 shadow-sm">
-        <div className="w-12 h-12 rounded-xl bg-accent flex items-center justify-center mx-auto mb-5">
-          <Zap className="w-6 h-6 text-white" />
-        </div>
+        <span className="text-foreground mx-auto mb-5 flex justify-center">
+          <BlackMariaMark className="w-12 h-12" />
+        </span>
 
         {loading && (
           <>

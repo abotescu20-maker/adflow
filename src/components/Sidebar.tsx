@@ -12,13 +12,13 @@ import {
   Grid3X3,
   Share2,
   Search,
-  Zap,
   LogOut,
   ChevronDown,
   FolderKanban,
   Activity,
   Users,
 } from "lucide-react";
+import { BlackMariaMark } from "@/components/BlackMariaLogo";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -88,9 +88,9 @@ export default function Sidebar({
           onClick={() => setWsMenuOpen((o) => !o)}
           className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white transition-colors"
         >
-          <div className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-sm shrink-0">
-            <Zap className="w-5 h-5 text-white" />
-          </div>
+          <span className="text-foreground shrink-0">
+            <BlackMariaMark className="w-8 h-8" />
+          </span>
           <div className="flex-1 min-w-0 text-left">
             <h1 className="text-[13px] font-bold tracking-tight text-foreground truncate">
               {activeWorkspace?.name || "Black Frame"}
