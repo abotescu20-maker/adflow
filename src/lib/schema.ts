@@ -65,7 +65,51 @@ export interface Workspace {
   };
 }
 
-export type WorkspaceRole = "owner" | "admin" | "editor" | "reviewer" | "client";
+export type WorkspaceRole =
+  "owner" | "admin" | "editor" | "reviewer" | "client";
+
+// Production context (Black Frame P2) — actor type + craft, orthogonal to the
+// permission `role` above. The chain is client → agency → production house →
+// post-production. Set on login via the context picker.
+export type ActorType =
+  "client" | "agency" | "production_house" | "post_production";
+
+export const ACTOR_TYPE_LABELS: Record<ActorType, string> = {
+  client: "Client",
+  agency: "Agenție",
+  production_house: "Casă de producție",
+  post_production: "Post-producție",
+};
+
+// Craft / discipline inside a production or post house. Editable: users may add
+// custom crafts, so `craft` is stored free-form. These are just the defaults
+// the picker offers.
+export const DEFAULT_CRAFTS = [
+  "Regie",
+  "Montaj",
+  "Color",
+  "2D",
+  "3D",
+  "AI",
+  "Sunet",
+  "VFX",
+  "Motion",
+  "Producție",
+] as const;
+
+// Per-user identity/calendar color, assigned when context is set (spec P5).
+export const MEMBER_COLORS = [
+  "#6366f1",
+  "#ec4899",
+  "#f59e0b",
+  "#10b981",
+  "#06b6d4",
+  "#8b5cf6",
+  "#ef4444",
+  "#14b8a6",
+  "#f97316",
+  "#3b82f6",
+] as const;
 
 export interface WorkspaceMember {
   uid: string;
@@ -73,6 +117,11 @@ export interface WorkspaceMember {
   displayName: string;
   photoURL?: string;
   role: WorkspaceRole;
+  // Production context (Black Frame P2) — optional, set via the login picker.
+  actorType?: ActorType;
+  craft?: string | null; // free-form; defaults from DEFAULT_CRAFTS
+  color?: string; // identity/calendar color from MEMBER_COLORS
+  contextSetAt?: Timestamp;
   addedAt: Timestamp;
   addedBy: string;
 }
@@ -96,12 +145,7 @@ export interface WorkspaceInvitation {
 // CAMPAIGN
 // ============================================================================
 export type ApprovalStatus =
-  | "brief"
-  | "production"
-  | "review"
-  | "revision"
-  | "approved"
-  | "delivered";
+  "brief" | "production" | "review" | "revision" | "approved" | "delivered";
 
 export interface Campaign {
   id: string;
@@ -129,10 +173,7 @@ export interface Campaign {
 // ============================================================================
 export type AssetType = "video" | "image" | "audio" | "document";
 export type AssetProcessingStatus =
-  | "uploading"
-  | "processing"
-  | "ready"
-  | "failed";
+  "uploading" | "processing" | "ready" | "failed";
 
 export interface Asset {
   id: string;
@@ -299,7 +340,16 @@ export interface ActivityEntry {
   actorAvatar?: string;
   action: ActivityAction;
   // Target (what was acted on)
-  targetType: "workspace" | "campaign" | "asset" | "comment" | "member" | "review" | "share_link" | "deliverable" | "collection";
+  targetType:
+    | "workspace"
+    | "campaign"
+    | "asset"
+    | "comment"
+    | "member"
+    | "review"
+    | "share_link"
+    | "deliverable"
+    | "collection";
   targetId: string;
   targetName: string;
   // Context
@@ -370,7 +420,8 @@ export interface Comment {
 // ============================================================================
 // DELIVERABLE (output format matrix)
 // ============================================================================
-export type DeliverableStatus = "pending" | "rendering" | "ready" | "delivered" | "failed";
+export type DeliverableStatus =
+  "pending" | "rendering" | "ready" | "delivered" | "failed";
 
 export interface Deliverable {
   id: string;

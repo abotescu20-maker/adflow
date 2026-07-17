@@ -10,7 +10,12 @@ import {
   addDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { WorkspaceMember, WorkspaceRole, WorkspaceInvitation } from "@/lib/schema";
+import type {
+  WorkspaceMember,
+  WorkspaceRole,
+  WorkspaceInvitation,
+  ActorType,
+} from "@/lib/schema";
 
 export function membersRef(workspaceId: string) {
   return collection(db, "workspaces", workspaceId, "members");
@@ -63,8 +68,34 @@ export async function updateMemberRole(
   });
 }
 
-export async function removeMember(workspaceId: string, uid: string): Promise<void> {
+export async function removeMember(
+  workspaceId: string,
+  uid: string
+): Promise<void> {
   await deleteDoc(memberRef(workspaceId, uid));
+}
+
+// --- production context (Black Frame P2) ---
+
+export interface MemberContextInput {
+  actorType: ActorType;
+  craft?: string | null;
+  color: string;
+}
+
+// Written by the login context picker: which house you're in + your craft +
+// your identity color. Orthogonal to the permission role.
+export async function setMemberContext(
+  workspaceId: string,
+  uid: string,
+  input: MemberContextInput
+): Promise<void> {
+  await updateDoc(memberRef(workspaceId, uid), {
+    actorType: input.actorType,
+    craft: input.craft ?? null,
+    color: input.color,
+    contextSetAt: serverTimestamp(),
+  });
 }
 
 // --- invitations ---

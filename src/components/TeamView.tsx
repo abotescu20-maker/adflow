@@ -24,6 +24,7 @@ import {
 } from "@/lib/firestore/members";
 import { logActivity } from "@/lib/firestore/activity";
 import type { WorkspaceRole } from "@/lib/schema";
+import { ACTOR_TYPE_LABELS } from "@/lib/schema";
 
 const ROLE_BADGE: Record<WorkspaceRole, { label: string; class: string }> = {
   owner: { label: "Owner", class: "bg-violet-100 text-violet-700" },
@@ -60,7 +61,8 @@ export default function TeamView() {
         <div>
           <h2 className="text-xl font-bold text-foreground">Team</h2>
           <p className="text-sm text-muted mt-0.5">
-            {members.length} member{members.length !== 1 ? "s" : ""} in {activeWorkspace.name}
+            {members.length} member{members.length !== 1 ? "s" : ""} in{" "}
+            {activeWorkspace.name}
             {pendingInvites.length > 0 &&
               ` · ${pendingInvites.length} pending invite${pendingInvites.length !== 1 ? "s" : ""}`}
           </p>
@@ -95,7 +97,14 @@ export default function TeamView() {
                       key={m.uid}
                       className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/50 transition-colors"
                     >
-                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent to-violet-500 flex items-center justify-center text-[11px] font-bold text-white shrink-0">
+                      <div
+                        className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+                        style={{
+                          background: m.color
+                            ? m.color
+                            : "linear-gradient(to bottom right, var(--accent), #8b5cf6)",
+                        }}
+                      >
                         {getInitials(m.displayName)}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -108,15 +117,29 @@ export default function TeamView() {
                               (you)
                             </span>
                           )}
+                          {m.actorType && (
+                            <span className="text-[10px] font-medium text-muted border border-border rounded px-1.5 py-0.5">
+                              {ACTOR_TYPE_LABELS[m.actorType]}
+                              {m.craft ? ` · ${m.craft}` : ""}
+                            </span>
+                          )}
                         </div>
-                        <p className="text-[11px] text-muted truncate">{m.email}</p>
+                        <p className="text-[11px] text-muted truncate">
+                          {m.email}
+                        </p>
                       </div>
-                      {canManage && m.role !== "owner" && m.uid !== user?.uid ? (
+                      {canManage &&
+                      m.role !== "owner" &&
+                      m.uid !== user?.uid ? (
                         <select
                           value={m.role}
                           onChange={async (e) => {
                             const newRole = e.target.value as WorkspaceRole;
-                            await updateMemberRole(activeWorkspace.id, m.uid, newRole);
+                            await updateMemberRole(
+                              activeWorkspace.id,
+                              m.uid,
+                              newRole
+                            );
                             if (user && profile)
                               await logActivity(activeWorkspace.id, {
                                 actorId: user.uid,
@@ -130,13 +153,18 @@ export default function TeamView() {
                           }}
                           className={`text-[11px] font-semibold rounded-md px-2 py-1 border-0 cursor-pointer ${badge.class}`}
                         >
-                          {(["admin", "editor", "reviewer", "client"] as WorkspaceRole[]).map(
-                            (r) => (
-                              <option key={r} value={r}>
-                                {r.charAt(0).toUpperCase() + r.slice(1)}
-                              </option>
-                            )
-                          )}
+                          {(
+                            [
+                              "admin",
+                              "editor",
+                              "reviewer",
+                              "client",
+                            ] as WorkspaceRole[]
+                          ).map((r) => (
+                            <option key={r} value={r}>
+                              {r.charAt(0).toUpperCase() + r.slice(1)}
+                            </option>
+                          ))}
                         </select>
                       ) : (
                         <span
@@ -145,26 +173,33 @@ export default function TeamView() {
                           {badge.label}
                         </span>
                       )}
-                      {canManage && m.role !== "owner" && m.uid !== user?.uid && (
-                        <button
-                          onClick={async () => {
-                            if (!confirm(`Remove ${m.displayName} from the workspace?`)) return;
-                            await removeMember(activeWorkspace.id, m.uid);
-                            if (user && profile)
-                              await logActivity(activeWorkspace.id, {
-                                actorId: user.uid,
-                                actorName: profile.displayName,
-                                action: "member.removed",
-                                targetType: "member",
-                                targetId: m.uid,
-                                targetName: m.displayName,
-                              });
-                          }}
-                          className="p-1.5 rounded-md text-muted hover:text-red-500 hover:bg-red-50 transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                      {canManage &&
+                        m.role !== "owner" &&
+                        m.uid !== user?.uid && (
+                          <button
+                            onClick={async () => {
+                              if (
+                                !confirm(
+                                  `Remove ${m.displayName} from the workspace?`
+                                )
+                              )
+                                return;
+                              await removeMember(activeWorkspace.id, m.uid);
+                              if (user && profile)
+                                await logActivity(activeWorkspace.id, {
+                                  actorId: user.uid,
+                                  actorName: profile.displayName,
+                                  action: "member.removed",
+                                  targetType: "member",
+                                  targetId: m.uid,
+                                  targetName: m.displayName,
+                                });
+                            }}
+                            className="p-1.5 rounded-md text-muted hover:text-red-500 hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                     </div>
                   );
                 })}
@@ -190,7 +225,8 @@ export default function TeamView() {
                           {inv.email}
                         </p>
                         <p className="text-[11px] text-muted">
-                          Invited as {ROLE_BADGE[inv.role].label} by {inv.invitedByName}
+                          Invited as {ROLE_BADGE[inv.role].label} by{" "}
+                          {inv.invitedByName}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 text-[11px] text-muted">
@@ -199,7 +235,9 @@ export default function TeamView() {
                       </div>
                       {canManage && (
                         <button
-                          onClick={() => revokeInvitation(activeWorkspace.id, inv.id)}
+                          onClick={() =>
+                            revokeInvitation(activeWorkspace.id, inv.id)
+                          }
                           className="p-1.5 rounded-md text-muted hover:text-red-500 hover:bg-red-50 transition-colors"
                         >
                           <X className="w-3.5 h-3.5" />
@@ -215,7 +253,9 @@ export default function TeamView() {
               <div className="flex items-start gap-2.5">
                 <Shield className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                 <div className="text-xs">
-                  <p className="font-semibold text-foreground mb-1">Role permissions</p>
+                  <p className="font-semibold text-foreground mb-1">
+                    Role permissions
+                  </p>
                   <ul className="space-y-0.5 text-slate-600">
                     <li>
                       <b>Owner</b> — full control, billing, delete workspace
@@ -334,7 +374,9 @@ function InviteModal({
                   Role
                 </label>
                 <div className="grid grid-cols-2 gap-1.5">
-                  {(["admin", "editor", "reviewer", "client"] as WorkspaceRole[]).map((r) => (
+                  {(
+                    ["admin", "editor", "reviewer", "client"] as WorkspaceRole[]
+                  ).map((r) => (
                     <button
                       key={r}
                       onClick={() => setRole(r)}
@@ -372,7 +414,11 @@ function InviteModal({
                   onClick={copy}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-accent text-white hover:bg-accent-hover shrink-0"
                 >
-                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? (
+                    <Check className="w-3.5 h-3.5" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
                   {copied ? "Copied" : "Copy"}
                 </button>
               </div>

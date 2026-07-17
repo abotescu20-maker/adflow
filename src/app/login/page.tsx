@@ -53,12 +53,7 @@ function LoginForm() {
           <span className="text-foreground">
             <BlackMariaMark className="w-11 h-11" />
           </span>
-          <div>
-            <h1 className="text-lg font-bold tracking-tight">Black Frame</h1>
-            <p className="text-[11px] text-muted font-medium">
-              by Black Maria · Post-Production
-            </p>
-          </div>
+          <h1 className="text-lg font-bold tracking-tight">Black Frame</h1>
         </div>
 
         <div className="bg-white rounded-2xl border border-border shadow-sm p-7">

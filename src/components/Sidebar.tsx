@@ -23,6 +23,7 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
 import { useFolderCounts } from "@/hooks/useFolderCounts";
+import { ACTOR_TYPE_LABELS } from "@/lib/schema";
 
 const FOLDERS = [
   { id: "footage", name: "Raw Footage", icon: "film" },
@@ -68,8 +69,13 @@ export default function Sidebar({
   onOpenSearch,
 }: SidebarProps) {
   const { profile, signOut } = useAuth();
-  const { activeWorkspace, workspaces, setActiveWorkspaceId, currentRole } =
-    useWorkspace();
+  const {
+    activeWorkspace,
+    workspaces,
+    setActiveWorkspaceId,
+    currentRole,
+    currentMember,
+  } = useWorkspace();
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
   const folderCounts = useFolderCounts(activeWorkspace?.id ?? null);
 
@@ -95,11 +101,11 @@ export default function Sidebar({
             <h1 className="text-[13px] font-bold tracking-tight text-foreground truncate">
               {activeWorkspace?.name || "Black Frame"}
             </h1>
-            <p className="text-[11px] text-muted font-medium truncate">
-              {currentRole
-                ? currentRole.charAt(0).toUpperCase() + currentRole.slice(1)
-                : "Post-Production"}
-            </p>
+            {currentRole && (
+              <p className="text-[11px] text-muted font-medium truncate">
+                {currentRole.charAt(0).toUpperCase() + currentRole.slice(1)}
+              </p>
+            )}
           </div>
           <ChevronDown
             className={`w-3.5 h-3.5 text-muted transition-transform ${
@@ -267,14 +273,27 @@ export default function Sidebar({
       {/* Quick actions + User */}
       <div className="px-3 py-3 border-t border-border">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent to-violet-500 flex items-center justify-center text-white text-xs font-bold shadow-sm shrink-0">
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm shrink-0"
+            style={{
+              background: currentMember?.color
+                ? currentMember.color
+                : "linear-gradient(to bottom right, var(--accent), #8b5cf6)",
+            }}
+          >
             {initials}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[13px] font-semibold text-foreground truncate">
               {profile?.displayName || "User"}
             </p>
-            <p className="text-[11px] text-muted truncate">{profile?.email}</p>
+            <p className="text-[11px] text-muted truncate">
+              {currentMember?.actorType
+                ? `${ACTOR_TYPE_LABELS[currentMember.actorType]}${
+                    currentMember.craft ? ` · ${currentMember.craft}` : ""
+                  }`
+                : profile?.email}
+            </p>
           </div>
           <button
             onClick={signOut}

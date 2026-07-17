@@ -55,6 +55,14 @@ service cloud.firestore {
         // Admins and owners can add/update/delete other members
         allow update, delete: if hasAnyRole(workspaceId, ['owner', 'admin']) ||
           (request.auth.uid == memberId && request.method == 'delete');
+        // A member may set their OWN production context (Black Frame P2: actor
+        // type, craft, identity color) via the login picker. Restricted to those
+        // four fields with role unchanged, so this can't be used to self-promote.
+        allow update: if request.auth != null &&
+          request.auth.uid == memberId &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['actorType', 'craft', 'color', 'contextSetAt']);
         allow create: if hasAnyRole(workspaceId, ['owner', 'admin']);
       }
 

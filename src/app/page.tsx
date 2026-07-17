@@ -16,16 +16,24 @@ import TeamView from "@/components/TeamView";
 import ShareLinksView from "@/components/ShareLinksView";
 import NotificationsBell from "@/components/NotificationsBell";
 import GlobalSearch from "@/components/GlobalSearch";
+import { ContextPicker } from "@/components/ContextPicker";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
 
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
-  const { workspaces, activeWorkspace, loading: wsLoading } = useWorkspace();
+  const {
+    workspaces,
+    activeWorkspace,
+    currentMember,
+    loading: wsLoading,
+  } = useWorkspace();
   const router = useRouter();
 
   const [view, setView] = useState<View>("dashboard");
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(
+    null
+  );
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -149,7 +157,9 @@ export default function Home() {
           {view === "assets" && !selectedCampaignId && (
             <div className="h-full flex items-center justify-center bg-subtle/30">
               <div className="text-center">
-                <p className="text-sm text-muted mb-3">Select a campaign to view assets</p>
+                <p className="text-sm text-muted mb-3">
+                  Select a campaign to view assets
+                </p>
                 <button
                   onClick={() => setView("dashboard")}
                   className="px-4 py-2 rounded-lg text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors shadow-sm shadow-accent/20"
@@ -194,6 +204,10 @@ export default function Home() {
         onOpenCampaign={handleOpenCampaign}
         onOpenAsset={handleOpenAssetCross}
       />
+
+      {/* Black Frame P2: on first entry into a workspace, ask why you're here
+          and what your craft is before showing the project. */}
+      {currentMember && !currentMember.actorType && <ContextPicker />}
     </div>
   );
 }
