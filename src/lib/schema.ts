@@ -68,7 +68,7 @@ export interface Workspace {
 export type WorkspaceRole =
   "owner" | "admin" | "editor" | "reviewer" | "client";
 
-// Production context (Black Frame P2) — actor type + craft, orthogonal to the
+// Production context (Blackframe P2) — actor type + craft, orthogonal to the
 // permission `role` above. The chain is client → agency → production house →
 // post-production. Set on login via the context picker.
 export type ActorType =
@@ -117,7 +117,7 @@ export interface WorkspaceMember {
   displayName: string;
   photoURL?: string;
   role: WorkspaceRole;
-  // Production context (Black Frame P2) — optional, set via the login picker.
+  // Production context (Blackframe P2) — optional, set via the login picker.
   actorType?: ActorType;
   craft?: string | null; // free-form; defaults from DEFAULT_CRAFTS
   color?: string; // identity/calendar color from MEMBER_COLORS

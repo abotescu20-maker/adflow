@@ -75,7 +75,7 @@ export async function removeMember(
   await deleteDoc(memberRef(workspaceId, uid));
 }
 
-// --- production context (Black Frame P2) ---
+// --- production context (Blackframe P2) ---
 
 export interface MemberContextInput {
   actorType: ActorType;

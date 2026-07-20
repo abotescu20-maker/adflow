@@ -266,7 +266,7 @@ export default function PublicSharePage({
           </span>
           <div>
             <h1 className="text-sm font-bold text-foreground">
-              Black Frame Review
+              Blackframe Review
             </h1>
             <p className="text-[11px] text-muted">
               {campaign?.name || asset?.name || "Client review"}
@@ -485,7 +485,7 @@ export default function PublicSharePage({
       </div>
 
       <footer className="bg-white border-t border-border px-6 py-2.5 flex items-center justify-between text-[11px] text-muted">
-        <span>Powered by Black Frame</span>
+        <span>Powered by Blackframe</span>
         <span>Permissions: {permissionsSummary(share.permissions)}</span>
       </footer>
     </div>

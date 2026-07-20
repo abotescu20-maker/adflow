@@ -99,7 +99,7 @@ export default function Sidebar({
           </span>
           <div className="flex-1 min-w-0 text-left">
             <h1 className="text-[13px] font-bold tracking-tight text-foreground truncate">
-              {activeWorkspace?.name || "Black Frame"}
+              {activeWorkspace?.name || "Blackframe"}
             </h1>
             {currentRole && (
               <p className="text-[11px] text-muted font-medium truncate">

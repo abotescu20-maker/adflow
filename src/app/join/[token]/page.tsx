@@ -62,7 +62,7 @@ export default function JoinPage({
         {!loading && !user && (
           <>
             <h1 className="text-lg font-semibold mb-2">
-              You&apos;ve been invited to Black Frame
+              You&apos;ve been invited to Blackframe
             </h1>
             <p className="text-sm text-muted mb-5">
               Sign in to accept your invitation and join the workspace.
@@ -102,7 +102,7 @@ export default function JoinPage({
               onClick={() => router.push("/")}
               className="text-sm font-medium text-accent hover:underline"
             >
-              Go to Black Frame
+              Go to Blackframe
             </button>
           </>
         )}

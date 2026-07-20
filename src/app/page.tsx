@@ -205,7 +205,7 @@ export default function Home() {
         onOpenAsset={handleOpenAssetCross}
       />
 
-      {/* Black Frame P2: on first entry into a workspace, ask why you're here
+      {/* Blackframe P2: on first entry into a workspace, ask why you're here
           and what your craft is before showing the project. */}
       {currentMember && !currentMember.actorType && <ContextPicker />}
     </div>

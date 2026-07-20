@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Black Frame theme (17.07.2026): black background, typewriter/monospace, mono-brand. */
+/* Blackframe theme (17.07.2026): black background, typewriter/monospace, mono-brand. */
 :root {
   --background: #000000;
   --foreground: #ededed;
@@ -46,7 +46,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  /* Typewriter / monospace everywhere (Black Frame brand). */
+  /* Typewriter / monospace everywhere (Blackframe brand). */
   font-family:
     var(--font-mono), "Courier New", ui-monospace, SFMono-Regular, monospace;
 }

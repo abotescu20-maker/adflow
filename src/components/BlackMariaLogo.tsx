@@ -36,7 +36,7 @@ export function BlackMariaMark({
 // The logo is clickable → opens Stefan's easter-egg. Until the client provides the
 // actual video, we show the line as text (swap `videoUrl` when the file exists).
 export function LogoButton({
-  wordmark = "Black Frame",
+  wordmark = "Blackframe",
   videoUrl,
   markClassName = "w-7 h-7",
 }: {

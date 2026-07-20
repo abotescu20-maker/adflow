@@ -53,7 +53,7 @@ function LoginForm() {
           <span className="text-foreground">
             <BlackMariaMark className="w-11 h-11" />
           </span>
-          <h1 className="text-lg font-bold tracking-tight">Black Frame</h1>
+          <h1 className="text-lg font-bold tracking-tight">Blackframe</h1>
         </div>
 
         <div className="bg-white rounded-2xl border border-border shadow-sm p-7">
@@ -61,7 +61,7 @@ function LoginForm() {
             Welcome back
           </h2>
           <p className="text-sm text-muted mb-6">
-            Sign in to your Black Frame workspace
+            Sign in to your Blackframe workspace
           </p>
 
           <button

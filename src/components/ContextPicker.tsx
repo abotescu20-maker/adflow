@@ -37,7 +37,7 @@ function colorForUid(uid: string): string {
   return MEMBER_COLORS[sum % MEMBER_COLORS.length];
 }
 
-// The "why are you here + your role" picker (Black Frame P2). Rendered by the
+// The "why are you here + your role" picker (Blackframe P2). Rendered by the
 // dashboard when the active membership has no production context yet. Writing
 // the context updates the member doc; the realtime listener then hides this.
 export function ContextPicker() {

@@ -57,7 +57,7 @@ export default function OnboardingPage() {
           <span className="text-foreground">
             <BlackMariaMark className="w-10 h-10" />
           </span>
-          <h1 className="text-lg font-bold tracking-tight">Black Frame</h1>
+          <h1 className="text-lg font-bold tracking-tight">Blackframe</h1>
         </div>
 
         <div className="bg-white rounded-2xl border border-border shadow-sm p-7">
