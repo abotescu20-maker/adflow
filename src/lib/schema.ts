@@ -196,6 +196,7 @@ export interface Asset {
   width?: number;
   height?: number;
   durationSeconds?: number;
+  fps?: number; // frame rate; auto-detected in the player, manually overridable
   format?: string; // e.g. "ProRes 422", "H.264"
   // Generated variants
   thumbnailURL?: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { onSnapshot } from "firebase/firestore";
 import {
   ArrowLeft,
@@ -51,6 +51,7 @@ import {
 import { useMembers } from "@/hooks/useMembers";
 import { upload } from "@vercel/blob/client";
 import {
+  updateAsset,
   updateAssetStatus,
   switchActiveVersion,
   setAssetRating,
@@ -83,6 +84,19 @@ function formatTimecode(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
+// Colorists talk in SMPTE with frames, not "1 minute 23".
+const STANDARD_FPS = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+
+function formatSmpte(seconds: number, fps: number): string {
+  const t = Math.max(0, seconds || 0);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = Math.floor(t % 60);
+  const f = Math.min(Math.ceil(fps) - 1, Math.floor((t - Math.floor(t)) * fps));
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(h)}:${p(m)}:${p(s)}:${p(f)}`;
 }
 
 function formatTimeAgo(ts: CommentType["createdAt"] | undefined): string {
@@ -129,49 +143,173 @@ interface Props {
   onBack: () => void;
 }
 
-export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }: Props) {
+export default function AssetViewer({
+  workspaceId,
+  campaignId,
+  assetId,
+  onBack,
+}: Props) {
   const { user, profile } = useAuth();
   const toast = useToast();
-  const { asset, loading: assetLoading } = useAsset(workspaceId, campaignId, assetId);
-  const { comments, loading: commentsLoading } = useComments(workspaceId, campaignId, assetId);
+  const { asset, loading: assetLoading } = useAsset(
+    workspaceId,
+    campaignId,
+    assetId
+  );
+  const { comments, loading: commentsLoading } = useComments(
+    workspaceId,
+    campaignId,
+    assetId
+  );
   const { versions } = useAssetVersions(workspaceId, campaignId, assetId);
   const activity = useAssetActivity(workspaceId, assetId, 30);
 
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // Keyboard shortcuts for the player (frame.io-style). Ignored while typing.
+  // Frame rate: the old code hardcoded 30fps, which made frame-stepping wrong
+  // on 24/25/50fps material. Default 25 (PAL), auto-detect from playback via
+  // requestVideoFrameCallback, manual override wins and is saved on the asset.
+  const [fps, setFps] = useState(25);
+  const fpsLocked = useRef(false);
+  const [rateLabel, setRateLabel] = useState("1.0x");
+  const shuttle = useRef<{
+    dir: -1 | 0 | 1;
+    rate: number;
+    timer: ReturnType<typeof setInterval> | null;
+  }>({ dir: 0, rate: 1, timer: null });
+
+  const stopShuttle = useCallback((v: HTMLVideoElement | null) => {
+    if (shuttle.current.timer) clearInterval(shuttle.current.timer);
+    shuttle.current = { dir: 0, rate: 1, timer: null };
+    if (v) v.playbackRate = 1;
+    setRateLabel("1.0x");
+  }, []);
+
+  // A saved per-asset fps wins over detection.
+  useEffect(() => {
+    if (asset?.fps) {
+      fpsLocked.current = true;
+      setFps(asset.fps);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asset?.fps]);
+
+  // Auto-detect fps from median mediaTime delta over ~20 real frames.
+  useEffect(() => {
+    type VFC = HTMLVideoElement & {
+      requestVideoFrameCallback: (
+        cb: (now: number, meta: { mediaTime: number }) => void
+      ) => number;
+      cancelVideoFrameCallback: (h: number) => void;
+    };
+    if (!videoEl || !("requestVideoFrameCallback" in videoEl)) return;
+    const v = videoEl as VFC;
+    let prev: number | null = null;
+    const deltas: number[] = [];
+    let handle = 0;
+    let stopped = false;
+    const cb = (_now: number, meta: { mediaTime: number }) => {
+      if (stopped || fpsLocked.current) return;
+      if (prev != null) {
+        const d = meta.mediaTime - prev;
+        if (d > 0.005 && d < 0.1) deltas.push(d);
+      }
+      prev = meta.mediaTime;
+      if (deltas.length >= 20) {
+        deltas.sort((a, b) => a - b);
+        const detected = 1 / deltas[Math.floor(deltas.length / 2)];
+        const nearest = STANDARD_FPS.reduce((best, c) =>
+          Math.abs(c - detected) < Math.abs(best - detected) ? c : best
+        );
+        if (Math.abs(nearest - detected) / nearest < 0.05) setFps(nearest);
+        return;
+      }
+      handle = v.requestVideoFrameCallback(cb);
+    };
+    handle = v.requestVideoFrameCallback(cb);
+    return () => {
+      stopped = true;
+      v.cancelVideoFrameCallback?.(handle);
+    };
+  }, [videoEl]);
+
+  // Keyboard shortcuts for the player (frame.io-style: space, ,/., arrows,
+  // J/K/L shuttle). Ignored while typing.
   useEffect(() => {
     if (!videoEl) return;
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       const tag = el?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
-      const FRAME = 1 / 30;
+      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable)
+        return;
+      const FRAME = 1 / fps;
+      const key = e.key.toLowerCase();
       if (e.key === " ") {
         e.preventDefault();
+        stopShuttle(videoEl);
         if (videoEl.paused) videoEl.play();
         else videoEl.pause();
       } else if (e.key === ",") {
+        stopShuttle(videoEl);
         videoEl.pause();
         videoEl.currentTime = Math.max(0, videoEl.currentTime - FRAME);
       } else if (e.key === ".") {
+        stopShuttle(videoEl);
         videoEl.pause();
-        videoEl.currentTime = Math.min(videoEl.duration || 0, videoEl.currentTime + FRAME);
+        videoEl.currentTime = Math.min(
+          videoEl.duration || 0,
+          videoEl.currentTime + FRAME
+        );
       } else if (e.key === "ArrowLeft") {
         videoEl.currentTime = Math.max(0, videoEl.currentTime - 5);
       } else if (e.key === "ArrowRight") {
-        videoEl.currentTime = Math.min(videoEl.duration || 0, videoEl.currentTime + 5);
+        videoEl.currentTime = Math.min(
+          videoEl.duration || 0,
+          videoEl.currentTime + 5
+        );
+      } else if (key === "k") {
+        videoEl.pause();
+        stopShuttle(videoEl);
+      } else if (key === "l") {
+        // forward shuttle: repeated L doubles the rate up to 8x
+        if (shuttle.current.timer) clearInterval(shuttle.current.timer);
+        const rate =
+          shuttle.current.dir === 1 ? Math.min(shuttle.current.rate * 2, 8) : 1;
+        shuttle.current = { dir: 1, rate, timer: null };
+        videoEl.playbackRate = rate;
+        videoEl.play();
+        setRateLabel(`${rate.toFixed(1)}x`);
+      } else if (key === "j") {
+        // reverse shuttle: browsers don't do negative playbackRate, so we
+        // seek backwards on a timer; repeated J doubles the speed
+        videoEl.pause();
+        if (shuttle.current.timer) clearInterval(shuttle.current.timer);
+        const rate =
+          shuttle.current.dir === -1
+            ? Math.min(shuttle.current.rate * 2, 8)
+            : 1;
+        const timer = setInterval(() => {
+          videoEl.currentTime = Math.max(0, videoEl.currentTime - rate * 0.12);
+          if (videoEl.currentTime <= 0) stopShuttle(videoEl);
+        }, 120);
+        shuttle.current = { dir: -1, rate, timer };
+        setRateLabel(`-${rate.toFixed(1)}x`);
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [videoEl]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      stopShuttle(null);
+    };
+  }, [videoEl, fps, stopShuttle]);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>("comments");
   const [commentText, setCommentText] = useState("");
-  const [commentVisibility, setCommentVisibility] = useState<"public" | "team">("public");
+  const [commentVisibility, setCommentVisibility] = useState<"public" | "team">(
+    "public"
+  );
   const [sendingComment, setSendingComment] = useState(false);
   const [pendingAtts, setPendingAtts] = useState<CommentAttachment[]>([]);
   const [attaching, setAttaching] = useState(false);
@@ -190,7 +328,10 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
         handleUploadUrl: "/api/upload",
         clientPayload: idToken,
       });
-      setPendingAtts((a) => [...a, { url: res.url, name: file.name, contentType: file.type }]);
+      setPendingAtts((a) => [
+        ...a,
+        { url: res.url, name: file.name, contentType: file.type },
+      ]);
     } catch {
       toast.error("Upload failed", "Could not attach that file.");
     } finally {
@@ -287,7 +428,13 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
     if (!user || !profile || !asset) return;
     setApproving(true);
     try {
-      await updateAssetStatus(workspaceId, campaignId, assetId, status, user.uid);
+      await updateAssetStatus(
+        workspaceId,
+        campaignId,
+        assetId,
+        status,
+        user.uid
+      );
       await logActivity(workspaceId, {
         actorId: user.uid,
         actorName: profile.displayName,
@@ -302,14 +449,21 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
         metadata: { version: asset.version, status },
       });
       if (status === "approved") {
-        toast.success("Asset approved", `${asset.name} was marked as approved.`);
+        toast.success(
+          "Asset approved",
+          `${asset.name} was marked as approved.`
+        );
       } else if (status === "revision") {
-        toast.warn("Changes requested", `${asset.name} is now awaiting a new revision.`);
+        toast.warn(
+          "Changes requested",
+          `${asset.name} is now awaiting a new revision.`
+        );
       } else {
         toast.info("Status updated", `Asset status set to ${status}.`);
       }
       // Also create an in-app notification (demo: to the uploader of the asset, if different)
-      const notifyUid = asset.uploadedBy !== user.uid ? asset.uploadedBy : user.uid;
+      const notifyUid =
+        asset.uploadedBy !== user.uid ? asset.uploadedBy : user.uid;
       await createNotification({
         uid: notifyUid,
         workspaceId,
@@ -339,8 +493,20 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
       await unresolveComment(workspaceId, campaignId, assetId, comment.id);
       await incrementAssetCommentsCount(workspaceId, campaignId, assetId, 0, 1);
     } else {
-      await resolveComment(workspaceId, campaignId, assetId, comment.id, user.uid);
-      await incrementAssetCommentsCount(workspaceId, campaignId, assetId, 0, -1);
+      await resolveComment(
+        workspaceId,
+        campaignId,
+        assetId,
+        comment.id,
+        user.uid
+      );
+      await incrementAssetCommentsCount(
+        workspaceId,
+        campaignId,
+        assetId,
+        0,
+        -1
+      );
     }
   };
 
@@ -361,7 +527,10 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
         assetName: asset.name,
         metadata: { switchedTo: v.version },
       });
-      toast.success(`Switched to V${v.version}`, "The viewer now shows this version.");
+      toast.success(
+        `Switched to V${v.version}`,
+        "The viewer now shows this version."
+      );
     } catch (err) {
       toast.error(
         "Couldn't switch version",
@@ -390,7 +559,9 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h3 className="text-sm font-semibold text-foreground">{asset.name}</h3>
+            <h3 className="text-sm font-semibold text-foreground">
+              {asset.name}
+            </h3>
             <p className="text-[11px] text-muted capitalize">
               {asset.folder} · V{asset.version} of {asset.versionCount || 1}
             </p>
@@ -465,7 +636,11 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
               />
             ) : asset.type === "image" && mediaSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={mediaSrc} alt={asset.name} className="max-w-full max-h-full object-contain" />
+              <img
+                src={mediaSrc}
+                alt={asset.name}
+                className="max-w-full max-h-full object-contain"
+              />
             ) : asset.type === "audio" && mediaSrc ? (
               <div className="flex flex-col items-center gap-4">
                 <Music className="w-20 h-20 text-slate-500" />
@@ -476,9 +651,13 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
               <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center">
                 <div className="text-center">
                   <Film className="w-16 h-16 text-slate-600 mx-auto mb-3" />
-                  <p className="text-slate-400 text-sm font-medium">{asset.name}</p>
+                  <p className="text-slate-400 text-sm font-medium">
+                    {asset.name}
+                  </p>
                   <p className="text-slate-500 text-xs mt-1">
-                    {asset.width && asset.height ? `${asset.width}×${asset.height}` : "—"}
+                    {asset.width && asset.height
+                      ? `${asset.width}×${asset.height}`
+                      : "—"}
                     {asset.format && ` · ${asset.format}`}
                   </p>
                 </div>
@@ -505,7 +684,11 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                 disabled={approving}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-600 transition-colors shadow-lg disabled:opacity-50"
               >
-                {approving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                {approving ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-3.5 h-3.5" />
+                )}
                 Approve
               </button>
               <button
@@ -525,7 +708,10 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
               className="timeline-track mb-2.5"
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+                const pct = Math.max(
+                  0,
+                  Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)
+                );
                 const d = videoEl?.duration || duration;
                 if (videoEl && d > 0) {
                   videoEl.currentTime = (pct / 100) * d;
@@ -535,14 +721,18 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                 }
               }}
             >
-              <div className="timeline-progress" style={{ width: `${progress}%` }} />
+              <div
+                className="timeline-progress"
+                style={{ width: `${progress}%` }}
+              />
             </div>
 
             {/* Comment markers */}
             <div className="relative h-3 mb-2">
               {comments.map((comment) => {
                 const d = videoEl?.duration || duration;
-                if (typeof comment.timecode !== "number" || d === 0) return null;
+                if (typeof comment.timecode !== "number" || d === 0)
+                  return null;
                 const pos = (comment.timecode / d) * 100;
                 return (
                   <button
@@ -565,7 +755,10 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => videoEl && (videoEl.currentTime = Math.max(0, videoEl.currentTime - 5))}
+                  onClick={() =>
+                    videoEl &&
+                    (videoEl.currentTime = Math.max(0, videoEl.currentTime - 5))
+                  }
                   disabled={!videoEl}
                   className="p-1 text-muted hover:text-foreground transition-colors disabled:opacity-40"
                 >
@@ -580,27 +773,76 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                   disabled={!videoEl}
                   className="p-1.5 rounded-full bg-accent text-white shadow-sm hover:bg-accent-hover transition-colors disabled:opacity-40"
                 >
-                  {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                  {isPlaying ? (
+                    <Pause className="w-4 h-4" />
+                  ) : (
+                    <Play className="w-4 h-4" />
+                  )}
                 </button>
                 <button
-                  onClick={() => videoEl && (videoEl.currentTime = Math.min(videoEl.duration, videoEl.currentTime + 5))}
+                  onClick={() =>
+                    videoEl &&
+                    (videoEl.currentTime = Math.min(
+                      videoEl.duration,
+                      videoEl.currentTime + 5
+                    ))
+                  }
                   disabled={!videoEl}
                   className="p-1 text-muted hover:text-foreground transition-colors disabled:opacity-40"
                 >
                   <SkipForward className="w-4 h-4" />
                 </button>
-                <span className="text-xs text-muted font-medium ml-1">1.0x</span>
+                <span
+                  className="text-xs text-muted font-medium ml-1"
+                  title="J/K/L: derulare înapoi / pauză / redare (apăsat repetat = dublează viteza)"
+                >
+                  {rateLabel}
+                </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-mono text-sm font-semibold text-accent">{currentTimecode}</span>
+                <span
+                  className="font-mono text-sm font-semibold text-accent"
+                  title={`SMPTE @ ${fps}fps`}
+                >
+                  {formatSmpte(currentTime, fps)}
+                </span>
                 <span className="text-xs text-slate-300">/</span>
                 <span className="font-mono text-sm text-muted">
-                  {formatTimecode(videoEl?.duration || duration)}
+                  {formatSmpte(videoEl?.duration || duration, fps)}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
+                <select
+                  value={fps}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    fpsLocked.current = true;
+                    setFps(v);
+                    // Persist so every reviewer steps the same frames.
+                    updateAsset(workspaceId, campaignId, assetId, {
+                      fps: v,
+                    }).catch(() => {});
+                  }}
+                  title="Frame rate (pentru pas pe cadru și SMPTE)"
+                  className="text-[10px] font-mono text-muted bg-transparent border border-border rounded-md px-1 py-0.5 cursor-pointer focus:outline-none"
+                >
+                  {STANDARD_FPS.map((f) => (
+                    <option key={f} value={f}>
+                      {f}fps
+                    </option>
+                  ))}
+                </select>
                 <button
-                  onClick={() => { if (videoEl) { videoEl.pause(); videoEl.currentTime = Math.max(0, videoEl.currentTime - 1 / 30); } }}
+                  onClick={() => {
+                    if (videoEl) {
+                      stopShuttle(videoEl);
+                      videoEl.pause();
+                      videoEl.currentTime = Math.max(
+                        0,
+                        videoEl.currentTime - 1 / fps
+                      );
+                    }
+                  }}
                   disabled={!videoEl}
                   title="Previous frame (,)"
                   className="p-1.5 text-muted hover:text-foreground hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40"
@@ -608,7 +850,16 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => { if (videoEl) { videoEl.pause(); videoEl.currentTime = Math.min(videoEl.duration || 0, videoEl.currentTime + 1 / 30); } }}
+                  onClick={() => {
+                    if (videoEl) {
+                      stopShuttle(videoEl);
+                      videoEl.pause();
+                      videoEl.currentTime = Math.min(
+                        videoEl.duration || 0,
+                        videoEl.currentTime + 1 / fps
+                      );
+                    }
+                  }}
                   disabled={!videoEl}
                   title="Next frame (.)"
                   className="p-1.5 text-muted hover:text-foreground hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40"
@@ -635,13 +886,15 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
         {/* Right panel */}
         <div className="w-full md:w-[360px] border-t md:border-t-0 md:border-l border-border flex flex-col bg-white shrink-0 max-h-[45vh] md:max-h-none">
           <div className="flex border-b border-border">
-            {([
-              { k: "comments", label: `Comments (${comments.length})` },
-              { k: "rounds", label: "Rounds" },
-              { k: "details", label: "Details" },
-              { k: "versions", label: `Versions (${versions.length || 1})` },
-              { k: "activity", label: "Activity" },
-            ] as const).map((t) => (
+            {(
+              [
+                { k: "comments", label: `Comments (${comments.length})` },
+                { k: "rounds", label: "Rounds" },
+                { k: "details", label: "Details" },
+                { k: "versions", label: `Versions (${versions.length || 1})` },
+                { k: "activity", label: "Activity" },
+              ] as const
+            ).map((t) => (
               <button
                 key={t.k}
                 onClick={() => setActiveTab(t.k)}
@@ -666,7 +919,9 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                 ) : comments.length === 0 ? (
                   <div className="text-center py-10">
                     <p className="text-sm text-muted">No comments yet</p>
-                    <p className="text-xs text-muted mt-1">Be the first to leave feedback</p>
+                    <p className="text-xs text-muted mt-1">
+                      Be the first to leave feedback
+                    </p>
                   </div>
                 ) : (
                   comments.map((comment) => (
@@ -730,7 +985,9 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                 )}
                 <button
                   onClick={() =>
-                    setCommentVisibility(commentVisibility === "public" ? "team" : "public")
+                    setCommentVisibility(
+                      commentVisibility === "public" ? "team" : "public"
+                    )
                   }
                   className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors ${
                     commentVisibility === "public"
@@ -738,7 +995,11 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                       : "bg-amber-50 text-amber-600"
                   }`}
                 >
-                  {commentVisibility === "public" ? <Eye className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                  {commentVisibility === "public" ? (
+                    <Eye className="w-3 h-3" />
+                  ) : (
+                    <Lock className="w-3 h-3" />
+                  )}
                   {commentVisibility === "public" ? "Public" : "Team"}
                 </button>
                 <div className="flex-1" />
@@ -746,7 +1007,11 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                   className="p-1 rounded-md text-muted hover:text-accent hover:bg-accent-light cursor-pointer transition-colors"
                   title="Attach a file"
                 >
-                  {attaching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
+                  {attaching ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Paperclip className="w-3.5 h-3.5" />
+                  )}
                   <input
                     type="file"
                     className="hidden"
@@ -768,7 +1033,9 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                   {mentionOpen && (
                     <div className="absolute bottom-full right-0 mb-1 w-48 max-h-52 overflow-y-auto bg-white border border-border rounded-lg shadow-lg z-20 py-1">
                       {members.length === 0 ? (
-                        <p className="px-3 py-2 text-[11px] text-muted">No teammates</p>
+                        <p className="px-3 py-2 text-[11px] text-muted">
+                          No teammates
+                        </p>
                       ) : (
                         members.map((m) => (
                           <button
@@ -797,7 +1064,11 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
                       <Paperclip className="w-3 h-3" />
                       <span className="max-w-[120px] truncate">{a.name}</span>
                       <button
-                        onClick={() => setPendingAtts((list) => list.filter((_, j) => j !== i))}
+                        onClick={() =>
+                          setPendingAtts((list) =>
+                            list.filter((_, j) => j !== i)
+                          )
+                        }
                         className="hover:text-red-600"
                       >
                         ×
@@ -871,7 +1142,9 @@ export default function AssetViewer({ workspaceId, campaignId, assetId, onBack }
           onClose={() => setAnnotateOpen(false)}
           onSave={async (blob) => {
             await addAttachment(
-              new File([blob], `annotation-${Date.now()}.jpg`, { type: "image/jpeg" })
+              new File([blob], `annotation-${Date.now()}.jpg`, {
+                type: "image/jpeg",
+              })
             );
             setActiveTab("comments");
             if (!commentText.trim()) setCommentText("Annotation attached — ");
@@ -977,7 +1250,10 @@ function DetailsTab({
               className="inline-flex items-center gap-1 px-2 py-0.5 bg-accent-light text-accent text-[11px] font-medium rounded-md"
             >
               {t}
-              <button onClick={() => removeTag(t)} className="hover:text-red-500">
+              <button
+                onClick={() => removeTag(t)}
+                className="hover:text-red-500"
+              >
                 ×
               </button>
             </span>
@@ -1015,7 +1291,9 @@ function DetailsTab({
             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-accent to-violet-500 flex items-center justify-center text-[9px] font-bold text-white">
               {getInitials(asset.assignedToName)}
             </div>
-            <span className="font-medium text-foreground">{asset.assignedToName}</span>
+            <span className="font-medium text-foreground">
+              {asset.assignedToName}
+            </span>
           </div>
         ) : (
           <p className="text-[11px] text-muted italic">Unassigned</p>
@@ -1075,14 +1353,18 @@ function VersionsTab({
           <div
             key={v.id}
             className={`rounded-xl border p-3 ${
-              isActive ? "border-accent bg-accent-light/40" : "border-border hover:bg-slate-50"
+              isActive
+                ? "border-accent bg-accent-light/40"
+                : "border-border hover:bg-slate-50"
             }`}
           >
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <span
                   className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
-                    isActive ? "bg-accent text-white" : "bg-slate-100 text-slate-700"
+                    isActive
+                      ? "bg-accent text-white"
+                      : "bg-slate-100 text-slate-700"
                   }`}
                 >
                   V{v.version}
@@ -1102,14 +1384,18 @@ function VersionsTab({
                 </button>
               )}
             </div>
-            <p className="text-[11px] text-slate-600 truncate">{v.originalFileName}</p>
+            <p className="text-[11px] text-slate-600 truncate">
+              {v.originalFileName}
+            </p>
             <div className="flex items-center gap-3 mt-1.5 text-[10px] text-muted">
               <span>{formatBytes(v.sizeBytes)}</span>
               <span>{formatTimeAgo(v.createdAt)}</span>
               <span className="truncate">by {v.uploadedByName}</span>
             </div>
             {v.notes && (
-              <p className="mt-1.5 text-[11px] text-slate-600 italic">&ldquo;{v.notes}&rdquo;</p>
+              <p className="mt-1.5 text-[11px] text-slate-600 italic">
+                &ldquo;{v.notes}&rdquo;
+              </p>
             )}
           </div>
         );
@@ -1143,9 +1429,13 @@ function ActivityTab({ entries }: { entries: ActivityEntry[] }) {
               <span className="text-muted">{describeAction(e.action)}</span>
             </p>
             {e.targetName && (
-              <p className="text-[11px] text-muted truncate mt-0.5">&ldquo;{e.targetName}&rdquo;</p>
+              <p className="text-[11px] text-muted truncate mt-0.5">
+                &ldquo;{e.targetName}&rdquo;
+              </p>
             )}
-            <p className="text-[10px] text-muted mt-0.5">{formatTimeAgo(e.createdAt)}</p>
+            <p className="text-[10px] text-muted mt-0.5">
+              {formatTimeAgo(e.createdAt)}
+            </p>
           </div>
         </div>
       ))}
@@ -1243,10 +1533,15 @@ function ReviewRoundsTab({
           const mineRejected = uid ? !!r.rejections?.[uid] : false;
           const open = r.status === "open";
           return (
-            <div key={r.id} className="rounded-xl border border-border p-3 space-y-2">
+            <div
+              key={r.id}
+              className="rounded-xl border border-border p-3 space-y-2"
+            >
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold text-foreground truncate">{r.title}</p>
+                  <p className="text-xs font-semibold text-foreground truncate">
+                    {r.title}
+                  </p>
                   <p className="text-[10px] text-muted">
                     V{r.version} · Round {r.roundNumber} ·{" "}
                     <span
@@ -1263,8 +1558,12 @@ function ReviewRoundsTab({
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-muted shrink-0">
-                  <span className="text-emerald-600 font-semibold">{approvals} ✓</span>
-                  <span className="text-red-600 font-semibold">{rejections} ✗</span>
+                  <span className="text-emerald-600 font-semibold">
+                    {approvals} ✓
+                  </span>
+                  <span className="text-red-600 font-semibold">
+                    {rejections} ✗
+                  </span>
                 </div>
               </div>
 
@@ -1272,7 +1571,16 @@ function ReviewRoundsTab({
                 <div className="flex items-center gap-1.5 pt-1">
                   <button
                     onClick={() =>
-                      act(() => rejectReviewRound(workspaceId, campaignId, assetId, r.id, uid, "Changes requested"))
+                      act(() =>
+                        rejectReviewRound(
+                          workspaceId,
+                          campaignId,
+                          assetId,
+                          r.id,
+                          uid,
+                          "Changes requested"
+                        )
+                      )
                     }
                     disabled={busy}
                     className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors disabled:opacity-40 ${
@@ -1285,7 +1593,15 @@ function ReviewRoundsTab({
                   </button>
                   <button
                     onClick={() =>
-                      act(() => approveReviewRound(workspaceId, campaignId, assetId, r.id, uid))
+                      act(() =>
+                        approveReviewRound(
+                          workspaceId,
+                          campaignId,
+                          assetId,
+                          r.id,
+                          uid
+                        )
+                      )
                     }
                     disabled={busy}
                     className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-40 ${
@@ -1298,7 +1614,15 @@ function ReviewRoundsTab({
                   </button>
                   <button
                     onClick={() =>
-                      act(() => closeReviewRound(workspaceId, campaignId, assetId, r.id, "completed"))
+                      act(() =>
+                        closeReviewRound(
+                          workspaceId,
+                          campaignId,
+                          assetId,
+                          r.id,
+                          "completed"
+                        )
+                      )
                     }
                     disabled={busy}
                     className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-white border border-border text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40"
@@ -1367,7 +1691,9 @@ function CommentCard({
     const unsub = onSnapshot(
       repliesQuery(workspaceId, campaignId, assetId, comment.id),
       (snap) =>
-        setReplies(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CommentType)))
+        setReplies(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as CommentType)
+        )
     );
     return () => unsub();
   }, [workspaceId, campaignId, assetId, comment.id]);
@@ -1415,7 +1741,9 @@ function CommentCard({
                 {formatTimecode(comment.timecode)}
               </button>
             )}
-            {comment.visibility === "team" && <Lock className="w-3 h-3 text-amber-500" />}
+            {comment.visibility === "team" && (
+              <Lock className="w-3 h-3 text-amber-500" />
+            )}
             {comment.resolved && <Check className="w-3 h-3 text-emerald-500" />}
           </div>
           <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">
@@ -1438,7 +1766,9 @@ function CommentCard({
             </div>
           )}
           <div className="flex items-center gap-3 mt-2">
-            <span className="text-[10px] text-muted">{formatTimeAgo(comment.createdAt)}</span>
+            <span className="text-[10px] text-muted">
+              {formatTimeAgo(comment.createdAt)}
+            </span>
             {authorId && (
               <button
                 onClick={() => setShowReply((s) => !s)}
@@ -1470,9 +1800,15 @@ function CommentCard({
                     {getInitials(r.authorName)}
                   </div>
                   <div className="min-w-0">
-                    <span className="text-[11px] font-semibold text-foreground">{r.authorName}</span>
-                    <p className="text-[11px] text-slate-600 leading-relaxed whitespace-pre-wrap">{r.text}</p>
-                    <span className="text-[9px] text-muted">{formatTimeAgo(r.createdAt)}</span>
+                    <span className="text-[11px] font-semibold text-foreground">
+                      {r.authorName}
+                    </span>
+                    <p className="text-[11px] text-slate-600 leading-relaxed whitespace-pre-wrap">
+                      {r.text}
+                    </p>
+                    <span className="text-[9px] text-muted">
+                      {formatTimeAgo(r.createdAt)}
+                    </span>
                   </div>
                 </div>
               ))}
