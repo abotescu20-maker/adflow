@@ -14,6 +14,8 @@ import {
   ChevronLeft,
   AtSign,
   Sparkles,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
@@ -77,6 +79,7 @@ export default function ChatLayer() {
   const { members } = useMembers(activeWorkspace?.id ?? null);
 
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [generalThread, setGeneralThread] = useState<ChatThread | null>(null);
@@ -399,7 +402,11 @@ export default function ChatLayer() {
       )}
 
       {open && (
-        <div className="fixed bottom-5 right-5 z-[70] w-[360px] max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-6rem)] bg-card-bg border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div
+          className={`fixed bottom-5 right-5 z-[70] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-6rem)] bg-card-bg border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden ${
+            expanded ? "w-[760px] h-[85vh]" : "w-[360px] h-[520px]"
+          }`}
+        >
           {/* Header */}
           <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border shrink-0">
             {activeThread ? (
@@ -435,6 +442,17 @@ export default function ChatLayer() {
             ) : (
               <span className="text-[13px] font-bold flex-1">Chat</span>
             )}
+            <button
+              onClick={() => setExpanded((x) => !x)}
+              title={expanded ? "Micșorează" : "Mărește (vezi media mare)"}
+              className="p-1 rounded-lg text-muted hover:text-foreground hover:bg-card-hover"
+            >
+              {expanded ? (
+                <Minimize2 className="w-4 h-4" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
+            </button>
             <button
               onClick={() => setOpen(false)}
               className="p-1 rounded-lg text-muted hover:text-foreground hover:bg-card-hover"
@@ -584,14 +602,18 @@ export default function ChatLayer() {
                             key={i}
                             src={a.url}
                             alt={a.name}
-                            className="mt-1.5 rounded-lg max-h-40 w-auto"
+                            className={`mt-1.5 rounded-lg w-auto ${
+                              expanded ? "max-h-[28rem]" : "max-h-40"
+                            }`}
                           />
                         ) : isVideo(a.contentType) ? (
                           <video
                             key={i}
                             src={a.url}
                             controls
-                            className="mt-1.5 rounded-lg max-h-40 w-full"
+                            className={`mt-1.5 rounded-lg w-full ${
+                              expanded ? "max-h-[28rem]" : "max-h-40"
+                            }`}
                           />
                         ) : (
                           <a
