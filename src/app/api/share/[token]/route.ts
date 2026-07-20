@@ -8,8 +8,12 @@ import { FieldValue, type DocumentSnapshot } from "firebase-admin/firestore";
 // read the workspace's assets with the client SDK — Firestore rules correctly
 // forbid anonymous reads (C2). So we resolve everything server-side via the Admin
 // SDK after validating the token, and return only the shared assets.
-function serializeAsset(d: DocumentSnapshot) {
+// H5: guests never see the raw Vercel Blob URL (public + permanent + immune
+// to link revocation). Media is served through the token-gated proxy route,
+// which re-validates the share on every request.
+function serializeAsset(d: DocumentSnapshot, token: string) {
   const a = d.data() || {};
+  const hasMedia = !!(a.downloadURL ?? a.storagePath);
   return {
     id: d.id,
     name: a.name ?? "Untitled",
@@ -17,8 +21,8 @@ function serializeAsset(d: DocumentSnapshot) {
     version: a.version ?? 1,
     folder: a.folder ?? null,
     status: a.status ?? null,
-    downloadURL: a.downloadURL ?? a.storagePath ?? null,
-    storagePath: a.storagePath ?? null,
+    downloadURL: hasMedia ? `/api/share/${token}/media/${d.id}` : null,
+    storagePath: null,
     thumbnailURL: a.thumbnailURL ?? null,
     originalFileName: a.originalFileName ?? null,
     width: a.width ?? null,
@@ -74,10 +78,12 @@ export async function GET(
         const docs = await Promise.all(
           share.assetIds.map((id) => assetsCol.doc(id).get())
         );
-        assets = docs.filter((d) => d.exists).map(serializeAsset);
+        assets = docs
+          .filter((d) => d.exists)
+          .map((d) => serializeAsset(d, token));
       } else {
         const snap = await assetsCol.orderBy("createdAt", "desc").get();
-        assets = snap.docs.map(serializeAsset);
+        assets = snap.docs.map((d) => serializeAsset(d, token));
       }
     }
 
