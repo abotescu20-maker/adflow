@@ -40,6 +40,7 @@ interface ShareComment {
   text: string;
   timecode: number | null;
   isDecision: boolean;
+  createdAtMs: number | null;
 }
 
 function formatTc(seconds: number): string {
@@ -461,6 +462,16 @@ export default function PublicSharePage({
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <span className="text-xs font-semibold text-foreground truncate">
                         {c.authorName}
+                        {c.createdAtMs && (
+                          <span className="ml-1.5 font-normal text-[10px] text-muted">
+                            {new Date(c.createdAtMs).toLocaleString("ro-RO", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        )}
                       </span>
                       {c.timecode != null && (
                         <button

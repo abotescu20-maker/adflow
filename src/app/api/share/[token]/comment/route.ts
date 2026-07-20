@@ -7,6 +7,7 @@ import {
   cleanText,
   ShareAuthError,
 } from "@/lib/share-server";
+import { notifyTeamOfGuestFeedback } from "@/lib/share-notify";
 
 // POST /api/share/[token]/comment
 // Guest (unauthenticated) reviewer leaves a comment via a valid share link.
@@ -34,38 +35,58 @@ export async function POST(
     if (!text) throw new ShareAuthError("Comment text is required", 400);
     const guestName = cleanText(body.guestName, 80) || "Guest reviewer";
     const timecode =
-      typeof body.timecode === "number" && isFinite(body.timecode) && body.timecode >= 0
+      typeof body.timecode === "number" &&
+      isFinite(body.timecode) &&
+      body.timecode >= 0
         ? body.timecode
         : null;
 
-    const ref = await adminDb()
+    const assetRef = adminDb()
       .collection("workspaces")
       .doc(share.workspaceId)
       .collection("campaigns")
       .doc(campaignId)
       .collection("assets")
-      .doc(String(body.assetId))
-      .collection("comments")
-      .add({
+      .doc(String(body.assetId));
+
+    const ref = await assetRef.collection("comments").add({
+      workspaceId: share.workspaceId,
+      campaignId,
+      assetId: String(body.assetId),
+      authorId: `guest:${token.slice(0, 12)}`,
+      authorName: `${guestName} (Guest)`,
+      authorAvatar: null,
+      text,
+      timecode,
+      visibility: "public",
+      resolved: false,
+      resolvedBy: null,
+      resolvedAt: null,
+      parentCommentId: null,
+      attachments: [],
+      mentions: [],
+      viaShareToken: token,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    // In-app fan-out routed by the asset's folder → interested crafts.
+    // A failure here must not fail the guest's comment.
+    try {
+      const assetData = (await assetRef.get()).data() ?? {};
+      await notifyTeamOfGuestFeedback({
         workspaceId: share.workspaceId,
         campaignId,
         assetId: String(body.assetId),
-        authorId: `guest:${token.slice(0, 12)}`,
-        authorName: `${guestName} (Guest)`,
-        authorAvatar: null,
-        text,
-        timecode,
-        visibility: "public",
-        resolved: false,
-        resolvedBy: null,
-        resolvedAt: null,
-        parentCommentId: null,
-        attachments: [],
-        mentions: [],
-        viaShareToken: token,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
+        assetName: String(assetData.name ?? "Asset"),
+        assetFolder: assetData.folder as string | undefined,
+        guestName,
+        kind: "comment",
+        preview: text,
       });
+    } catch (e) {
+      console.error("guest-feedback fan-out failed:", e);
+    }
 
     return NextResponse.json({ ok: true, id: ref.id });
   } catch (error) {

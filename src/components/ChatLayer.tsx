@@ -29,6 +29,7 @@ import {
   messagesQuery,
   sendMessage,
   markMessageRead,
+  markMessagesRead,
   notifyChatRecipient,
   godGreeting,
   godChildWord,
@@ -123,16 +124,31 @@ export default function ChatLayer() {
     return () => unsubs.forEach((u) => u());
   }, [wsId, myUid, ownerUid]);
 
-  // Subscribe to the active conversation.
+  // Subscribe to the active conversation. The query is newest-first (so a busy
+  // thread always shows the latest window) — reverse for display.
   useEffect(() => {
-    if (!wsId || !activeThreadId) {
+    if (!wsId || !activeThreadId || !myUid) {
       setMessages([]);
       return;
     }
     const unsub = onSnapshot(messagesQuery(wsId, activeThreadId), (snap) => {
-      setMessages(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ChatMessage)
-      );
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as ChatMessage)
+        .reverse();
+      setMessages(list);
+      // Auto-read on view: everything you're shown gets ticked, EXCEPT
+      // messages that @mention you — those stay red until you tick them
+      // yourself (the explicit confirmation the workflow wants).
+      const autoIds = list
+        .filter(
+          (m) =>
+            m.authorId !== myUid &&
+            !m.readBy.includes(myUid) &&
+            !m.mentions?.includes(myUid)
+        )
+        .map((m) => m.id);
+      if (autoIds.length)
+        markMessagesRead(wsId, activeThreadId, autoIds, myUid).catch(() => {});
       setTimeout(
         () => bottomRef.current?.scrollIntoView({ behavior: "smooth" }),
         50
@@ -145,7 +161,19 @@ export default function ChatLayer() {
     );
     bumpDots((n) => n + 1);
     return () => unsub();
-  }, [wsId, activeThreadId]);
+  }, [wsId, activeThreadId, myUid]);
+
+  // Deep-link: /?thread=<id> (from notifications) opens that conversation.
+  useEffect(() => {
+    if (!wsId) return;
+    const params = new URLSearchParams(window.location.search);
+    const tid = params.get("thread");
+    if (tid) {
+      setActiveThreadId(tid);
+      setOpen(true);
+      window.history.replaceState(null, "", "/");
+    }
+  }, [wsId]);
 
   // App breaks → tell the superadmin directly on chat (Talk to God, system msg).
   useEffect(() => {
@@ -167,6 +195,7 @@ export default function ChatLayer() {
             notifyChatRecipient({
               recipientUid: ownerUid,
               workspaceId: wsId,
+              threadId: tid,
               kind: "god_message",
               actorId: myUid,
               actorName: profile.displayName,
@@ -215,7 +244,11 @@ export default function ChatLayer() {
 
   const hasNewDot = (t: ChatThread): boolean => {
     if (!t.lastMessageAt) return false;
-    if (t.lastMessageBy === profile.displayName) return false;
+    // uid comparison — two people can share a display name
+    const isMine = t.lastMessageByUid
+      ? t.lastMessageByUid === myUid
+      : t.lastMessageBy === profile.displayName;
+    if (isMine) return false;
     const seen = Number(localStorage.getItem(lastOpenedKey(wsId, t.id)) || 0);
     return t.lastMessageAt.toDate().getTime() > seen;
   };
@@ -265,7 +298,12 @@ export default function ChatLayer() {
       return;
     setSending(true);
     try {
-      const mentions = pendingMentions.map((m) => m.uid);
+      // Prune ghost mentions: if the user deleted "@Name" from the text, the
+      // mention (and its notification) must not go out.
+      const liveMentions = pendingMentions.filter((m) =>
+        text.includes(`@${m.displayName}`)
+      );
+      const mentions = liveMentions.map((m) => m.uid);
       await sendMessage(wsId, activeThread.id, {
         authorId: myUid,
         authorName: profile.displayName,
@@ -290,6 +328,7 @@ export default function ChatLayer() {
           notifyChatRecipient({
             recipientUid: uid,
             workspaceId: wsId,
+            threadId: activeThread.id,
             kind: activeThread.type === "god" ? "god_message" : "chat_message",
             actorId: myUid,
             actorName: profile.displayName,
@@ -307,11 +346,16 @@ export default function ChatLayer() {
 
   const insertMention = (m: WorkspaceMember) => {
     setPendingMentions((p) => (p.find((x) => x.uid === m.uid) ? p : [...p, m]));
-    setText((t) => `${t.replace(/@\S*$/, "")}@${m.displayName} `);
+    setText((t) => `${t.replace(/@[^@\n]*$/, "")}@${m.displayName} `);
     setMentionOpen(false);
   };
 
-  const mentionFilter = (text.match(/@(\S*)$/)?.[1] || "").toLowerCase();
+  // [^@\n] instead of \S so multi-word names ("Ana Maria") keep filtering.
+  const mentionFilter = (text.match(/@([^@\n]*)$/)?.[1] || "").toLowerCase();
+  const mentionMatches = members.filter(
+    (m) =>
+      m.uid !== myUid && m.displayName.toLowerCase().includes(mentionFilter)
+  );
 
   return (
     <>
@@ -372,6 +416,21 @@ export default function ChatLayer() {
                 <span className="text-[13px] font-bold flex-1 truncate">
                   {threadTitle(activeThread)}
                 </span>
+                <button
+                  onClick={() => {
+                    const ids = messages
+                      .filter(
+                        (m) => m.authorId !== myUid && !m.readBy.includes(myUid)
+                      )
+                      .map((m) => m.id);
+                    if (ids.length)
+                      markMessagesRead(wsId, activeThread.id, ids, myUid);
+                  }}
+                  title="Marchează tot citit"
+                  className="p-1 rounded-lg text-muted hover:text-foreground hover:bg-card-hover"
+                >
+                  <CheckCheck className="w-4 h-4" />
+                </button>
               </>
             ) : (
               <span className="text-[13px] font-bold flex-1">Chat</span>
@@ -491,7 +550,16 @@ export default function ChatLayer() {
 
                 {messages.map((m) => {
                   const mine = m.authorId === myUid;
-                  const unread = !mine && !m.readBy.includes(myUid);
+                  // Auto-read covers ordinary messages; only an @mention of ME
+                  // stays red until I explicitly tick it.
+                  const unread =
+                    !mine &&
+                    !m.readBy.includes(myUid) &&
+                    !!m.mentions?.includes(myUid);
+                  const readerNames = m.readBy
+                    .filter((r) => r !== m.authorId)
+                    .map((r) => membersByUid.get(r)?.displayName ?? "…")
+                    .join(", ");
                   return (
                     <div
                       key={m.id}
@@ -557,7 +625,11 @@ export default function ChatLayer() {
                         ) : (
                           <span
                             className="flex items-center text-[10px] text-muted"
-                            title={`Citit de ${m.readBy.length}`}
+                            title={
+                              readerNames
+                                ? `Citit de: ${readerNames}`
+                                : "Necitit încă"
+                            }
                           >
                             {m.readBy.length > 1 ? (
                               <>
@@ -579,24 +651,25 @@ export default function ChatLayer() {
 
               {/* Composer */}
               <div className="border-t border-border p-2.5 shrink-0 relative">
-                {mentionOpen && (
+                {mentionOpen && mentionMatches.length > 0 && (
                   <div className="absolute bottom-full left-2.5 right-2.5 mb-1 bg-card-bg border border-border rounded-xl shadow-xl max-h-40 overflow-y-auto z-10">
-                    {members
-                      .filter(
-                        (m) =>
-                          m.uid !== myUid &&
-                          m.displayName.toLowerCase().includes(mentionFilter)
-                      )
-                      .map((m) => (
-                        <button
-                          key={m.uid}
-                          onClick={() => insertMention(m)}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12px] hover:bg-card-hover"
-                        >
-                          <AtSign className="w-3 h-3 text-accent" />
-                          {m.displayName}
-                        </button>
-                      ))}
+                    {mentionMatches.map((m, i) => (
+                      <button
+                        key={m.uid}
+                        onClick={() => insertMention(m)}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[12px] hover:bg-card-hover ${
+                          i === 0 ? "bg-card-hover" : ""
+                        }`}
+                      >
+                        <AtSign className="w-3 h-3 text-accent" />
+                        {m.displayName}
+                        {i === 0 && (
+                          <span className="ml-auto text-[9px] text-muted">
+                            Tab ↹
+                          </span>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 )}
                 {attachments.length > 0 && (
@@ -645,9 +718,20 @@ export default function ChatLayer() {
                     value={text}
                     onChange={(e) => {
                       setText(e.target.value);
-                      setMentionOpen(/@\S*$/.test(e.target.value));
+                      setMentionOpen(/@[^@\n]*$/.test(e.target.value));
                     }}
                     onKeyDown={(e) => {
+                      // Tab completes the top mention match, keyboard-first.
+                      if (
+                        e.key === "Tab" &&
+                        mentionOpen &&
+                        mentionMatches.length > 0
+                      ) {
+                        e.preventDefault();
+                        insertMention(mentionMatches[0]);
+                        return;
+                      }
+                      if (e.key === "Escape") setMentionOpen(false);
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
                         handleSend();

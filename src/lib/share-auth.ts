@@ -13,6 +13,7 @@ export class ShareAuthError extends Error {
 export interface ResolvedShare {
   token: string;
   workspaceId: string;
+  shareLinkId?: string; // back-reference to /workspaces/{id}/shareLinks
   campaignId: string | null;
   assetIds: string[];
   permissions: {

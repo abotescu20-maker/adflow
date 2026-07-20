@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { resolveShare, ShareAuthError } from "@/lib/share-server";
-import type { DocumentSnapshot } from "firebase-admin/firestore";
+import { FieldValue, type DocumentSnapshot } from "firebase-admin/firestore";
 
 // GET /api/share/[token]
 // Resolve a public share for the (unauthenticated) reviewer. The share page CANNOT
@@ -36,20 +36,44 @@ export async function GET(
     const share = await resolveShare(token);
     const db = adminDb();
 
+    // Make the view counter real — the production house should see whether
+    // the client actually opened the link. Fire-and-forget.
+    if (share.shareLinkId) {
+      db.collection("workspaces")
+        .doc(share.workspaceId)
+        .collection("shareLinks")
+        .doc(share.shareLinkId)
+        .set(
+          {
+            viewCount: FieldValue.increment(1),
+            lastViewedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        )
+        .catch(() => {});
+    }
+
     let campaign: { id: string; name: string | null } | null = null;
     let assets: ReturnType<typeof serializeAsset>[] = [];
 
     if (share.campaignId) {
       const campRef = db
-        .collection("workspaces").doc(share.workspaceId)
-        .collection("campaigns").doc(share.campaignId);
+        .collection("workspaces")
+        .doc(share.workspaceId)
+        .collection("campaigns")
+        .doc(share.campaignId);
       const campSnap = await campRef.get();
       if (campSnap.exists) {
-        campaign = { id: campSnap.id, name: (campSnap.data()?.name as string) ?? null };
+        campaign = {
+          id: campSnap.id,
+          name: (campSnap.data()?.name as string) ?? null,
+        };
       }
       const assetsCol = campRef.collection("assets");
       if (share.assetIds.length > 0) {
-        const docs = await Promise.all(share.assetIds.map((id) => assetsCol.doc(id).get()));
+        const docs = await Promise.all(
+          share.assetIds.map((id) => assetsCol.doc(id).get())
+        );
         assets = docs.filter((d) => d.exists).map(serializeAsset);
       } else {
         const snap = await assetsCol.orderBy("createdAt", "desc").get();
@@ -75,7 +99,8 @@ export async function GET(
     });
   } catch (error) {
     const status = error instanceof ShareAuthError ? error.status : 500;
-    const message = error instanceof Error ? error.message : "Unable to load share";
+    const message =
+      error instanceof Error ? error.message : "Unable to load share";
     return NextResponse.json({ error: message }, { status });
   }
 }

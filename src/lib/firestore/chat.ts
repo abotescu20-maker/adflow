@@ -11,6 +11,7 @@ import {
   where,
   limit as fsLimit,
   arrayUnion,
+  writeBatch,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -59,10 +60,13 @@ export function involvedThreadsQuery(workspaceId: string, uid: string) {
     threadsRef(workspaceId),
     where("participants", "array-contains", uid),
     orderBy("lastMessageAt", "desc"),
-    fsLimit(20)
+    fsLimit(50)
   );
 }
 
+// NEWEST-first + limit, reversed by the caller for display. (An asc+limit
+// query would pin the window to the OLDEST messages and a busy thread would
+// never show anything new.)
 export function messagesQuery(
   workspaceId: string,
   threadId: string,
@@ -70,7 +74,7 @@ export function messagesQuery(
 ) {
   return query(
     messagesRef(workspaceId, threadId),
-    orderBy("createdAt", "asc"),
+    orderBy("createdAt", "desc"),
     fsLimit(max)
   );
 }
@@ -190,6 +194,7 @@ export async function sendMessage(
     lastMessageAt: serverTimestamp(),
     lastMessageText: input.text.slice(0, 80),
     lastMessageBy: input.authorName,
+    lastMessageByUid: input.authorId, // dots compare by uid, not display name
   };
   // Mentioned people become participants → the thread shows up in their bar.
   if (input.mentions?.length)
@@ -209,10 +214,32 @@ export async function markMessageRead(
   });
 }
 
-// Notify a recipient that they have something to read.
+// One batched write for auto-read-on-view / "mark all read" — a click per
+// message doesn't survive contact with a 300-message delivery day.
+export async function markMessagesRead(
+  workspaceId: string,
+  threadId: string,
+  msgIds: string[],
+  uid: string
+): Promise<void> {
+  if (!msgIds.length) return;
+  const batch = writeBatch(db);
+  msgIds
+    .slice(0, 400) // stay under the 500-op batch limit
+    .forEach((id) =>
+      batch.update(messageRef(workspaceId, threadId, id), {
+        readBy: arrayUnion(uid),
+      })
+    );
+  await batch.commit();
+}
+
+// Notify a recipient that they have something to read — deep-linked to the
+// thread so the click lands on the conversation, not the homepage.
 export async function notifyChatRecipient(opts: {
   recipientUid: string;
   workspaceId: string;
+  threadId: string;
   kind: "chat_message" | "god_message";
   actorId: string;
   actorName: string;
@@ -229,7 +256,7 @@ export async function notifyChatRecipient(opts: {
     body: opts.preview.slice(0, 120),
     actorId: opts.actorId,
     actorName: opts.actorName,
-    targetUrl: "/",
+    targetUrl: `/?thread=${opts.threadId}`,
   });
 }
 

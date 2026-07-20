@@ -7,6 +7,7 @@ import {
   cleanText,
   ShareAuthError,
 } from "@/lib/share-server";
+import { notifyTeamOfGuestFeedback } from "@/lib/share-notify";
 
 // POST /api/share/[token]/approve
 // Guest (unauthenticated) reviewer approves or requests changes on an asset via a
@@ -31,7 +32,8 @@ export async function POST(
     };
 
     const campaignId = assertAssetInShare(share, String(body.assetId ?? ""));
-    const decision = body.decision === "approved" ? "approved" : "changes_requested";
+    const decision =
+      body.decision === "approved" ? "approved" : "changes_requested";
     const guestName = cleanText(body.guestName, 80) || "Guest reviewer";
     const note = cleanText(body.note, 2000);
 
@@ -43,20 +45,29 @@ export async function POST(
       .collection("assets")
       .doc(String(body.assetId));
 
-    // Update approval status + stamp who/when.
+    // Update approval status + stamp who/when — and PIN the version number.
+    // switchActiveVersion mutates `version` in place later, so without this
+    // snapshot "the client approved v2" is unprovable once v3 is uploaded.
+    const assetSnap = await assetRef.get();
+    const assetData = assetSnap.data() ?? {};
     await assetRef.set(
       {
         status: decision,
         approvedBy: `guest:${token.slice(0, 12)}`,
+        approvedByName: guestName,
         approvedAt: FieldValue.serverTimestamp(),
+        approvedVersion: assetData.version ?? 1,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
 
-    // Record the decision as a visible comment for the team's audit trail.
+    // Record the decision as a visible comment for the team's audit trail,
+    // stamped with the version it applies to.
     const label =
-      decision === "approved" ? "✅ Approved" : "🔴 Requested changes";
+      decision === "approved"
+        ? `✅ Approved (v${assetData.version ?? 1})`
+        : `🔴 Requested changes (v${assetData.version ?? 1})`;
     await assetRef.collection("comments").add({
       workspaceId: share.workspaceId,
       campaignId,
@@ -78,6 +89,23 @@ export async function POST(
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
+
+    // Tell the team (in-app fan-out routed by craft). Failure here must not
+    // fail the client's decision — log and move on.
+    try {
+      await notifyTeamOfGuestFeedback({
+        workspaceId: share.workspaceId,
+        campaignId,
+        assetId: String(body.assetId),
+        assetName: String(assetData.name ?? "Asset"),
+        assetFolder: assetData.folder as string | undefined,
+        guestName,
+        kind: decision === "approved" ? "approved" : "changes_requested",
+        preview: note || label,
+      });
+    } catch (e) {
+      console.error("guest-feedback fan-out failed:", e);
+    }
 
     return NextResponse.json({ ok: true, decision });
   } catch (error) {

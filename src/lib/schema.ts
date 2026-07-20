@@ -412,6 +412,7 @@ export interface ChatThread {
   lastMessageAt?: Timestamp;
   lastMessageText?: string;
   lastMessageBy?: string;
+  lastMessageByUid?: string;
 }
 
 export interface ChatMessage {

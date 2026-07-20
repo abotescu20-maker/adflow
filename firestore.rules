@@ -138,20 +138,39 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
-      // Chat (Blackframe P3). Threads are visible to the whole team ("vizibil
-      // pentru toată lumea"); messages bind the author; the only allowed
-      // message update is ticking readBy (the red-until-read mechanism).
+      // Chat (Blackframe P3). General/DM threads are visible to the whole team
+      // ("vizibil pentru toată lumea"); GOD threads are a private confessional
+      // — readable only by their participants (the member + the superadmin).
+      // Messages bind the author; the only allowed message update is ticking
+      // readBy (the red-until-read mechanism).
       match /threads/{threadId} {
-        allow read: if isMember(workspaceId);
+        function canSeeThread() {
+          return resource.data.type != 'god' ||
+            request.auth.uid in resource.data.participants;
+        }
+        allow read: if isMember(workspaceId) && canSeeThread();
         allow create: if isMember(workspaceId) &&
           request.resource.data.createdBy == request.auth.uid;
-        allow update: if isMember(workspaceId);
+        // Updates limited to the message-pointer fields + participants — a
+        // member must not be able to rewrite a thread's type or title.
+        allow update: if isMember(workspaceId) && canSeeThread() &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['lastMessageAt', 'lastMessageText', 'lastMessageBy',
+                      'lastMessageByUid', 'participants']);
         allow delete: if false;
 
         match /messages/{msgId} {
-          allow read: if isMember(workspaceId);
+          function parentThread() {
+            return get(/databases/$(database)/documents/workspaces/$(workspaceId)/threads/$(threadId)).data;
+          }
+          function canSeeParent() {
+            return parentThread().type != 'god' ||
+              request.auth.uid in parentThread().participants;
+          }
+          allow read: if isMember(workspaceId) && canSeeParent();
           allow create: if isMember(workspaceId) &&
-            request.resource.data.authorId == request.auth.uid;
+            request.resource.data.authorId == request.auth.uid &&
+            canSeeParent();
           allow update: if isMember(workspaceId) &&
             request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['readBy']);

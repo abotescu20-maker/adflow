@@ -31,6 +31,7 @@ export async function resolveShare(token: string): Promise<ResolvedShare> {
   return {
     token,
     workspaceId: String(d.workspaceId),
+    shareLinkId: (d.shareLinkId as string) ?? undefined,
     campaignId: (d.campaignId as string) ?? null,
     assetIds: Array.isArray(d.assetIds) ? (d.assetIds as string[]) : [],
     permissions: (d.permissions as ResolvedShare["permissions"]) ?? {},
