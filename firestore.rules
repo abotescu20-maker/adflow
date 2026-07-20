@@ -137,6 +137,44 @@ service cloud.firestore {
           request.resource.data.actorId == request.auth.uid;
         allow update, delete: if false;
       }
+
+      // Chat (Blackframe P3). Threads are visible to the whole team ("vizibil
+      // pentru toată lumea"); messages bind the author; the only allowed
+      // message update is ticking readBy (the red-until-read mechanism).
+      match /threads/{threadId} {
+        allow read: if isMember(workspaceId);
+        allow create: if isMember(workspaceId) &&
+          request.resource.data.createdBy == request.auth.uid;
+        allow update: if isMember(workspaceId);
+        allow delete: if false;
+
+        match /messages/{msgId} {
+          allow read: if isMember(workspaceId);
+          allow create: if isMember(workspaceId) &&
+            request.resource.data.authorId == request.auth.uid;
+          allow update: if isMember(workspaceId) &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['readBy']);
+          allow delete: if false;
+        }
+      }
+
+      // Calendar (Blackframe P5) — anyone on the team sees the planning; you
+      // only write/remove your own colored spans.
+      match /calendarEvents/{eventId} {
+        allow read: if isMember(workspaceId);
+        allow create: if isMember(workspaceId) &&
+          request.resource.data.uid == request.auth.uid;
+        allow delete: if isMember(workspaceId) &&
+          resource.data.uid == request.auth.uid;
+        allow update: if false;
+      }
+
+      // Personal notes (Blackframe P5) — strictly private to their owner.
+      match /notes/{noteUid} {
+        allow read, write: if isMember(workspaceId) &&
+          request.auth.uid == noteUid;
+      }
     }
 
     // Public share link access (read-only, token-based, handled via Cloud Functions)

@@ -14,12 +14,14 @@ import {
   Search,
   LogOut,
   ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
   FolderKanban,
   Activity,
   Users,
 } from "lucide-react";
 import { BlackMariaMark } from "@/components/BlackMariaLogo";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
 import { useFolderCounts } from "@/hooks/useFolderCounts";
@@ -77,6 +79,17 @@ export default function Sidebar({
     currentMember,
   } = useWorkspace();
   const [wsMenuOpen, setWsMenuOpen] = useState(false);
+  // Collapsible left menu ("claps" per client feedback) — persisted per device.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    setCollapsed(localStorage.getItem("bf:sidebarCollapsed") === "1");
+  }, []);
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      localStorage.setItem("bf:sidebarCollapsed", c ? "0" : "1");
+      return !c;
+    });
+  };
   const folderCounts = useFolderCounts(activeWorkspace?.id ?? null);
 
   const initials = (profile?.displayName || "?")
@@ -87,7 +100,9 @@ export default function Sidebar({
     .toUpperCase();
 
   return (
-    <aside className="w-[240px] bg-sidebar-bg border-r border-border flex flex-col h-full shrink-0">
+    <aside
+      className={`${collapsed ? "w-[64px]" : "w-[240px]"} bg-sidebar-bg border-r border-border flex flex-col h-full shrink-0 transition-all duration-200`}
+    >
       {/* Logo + workspace switcher */}
       <div className="px-3 pt-3 pb-2 relative">
         <button
@@ -97,21 +112,25 @@ export default function Sidebar({
           <span className="text-foreground shrink-0">
             <BlackMariaMark className="w-8 h-8" />
           </span>
-          <div className="flex-1 min-w-0 text-left">
-            <h1 className="text-[13px] font-bold tracking-tight text-foreground truncate">
-              {activeWorkspace?.name || "Blackframe"}
-            </h1>
-            {currentRole && (
-              <p className="text-[11px] text-muted font-medium truncate">
-                {currentRole.charAt(0).toUpperCase() + currentRole.slice(1)}
-              </p>
-            )}
-          </div>
-          <ChevronDown
-            className={`w-3.5 h-3.5 text-muted transition-transform ${
-              wsMenuOpen ? "rotate-180" : ""
-            }`}
-          />
+          {!collapsed && (
+            <>
+              <div className="flex-1 min-w-0 text-left">
+                <h1 className="text-[13px] font-bold tracking-tight text-foreground truncate">
+                  {activeWorkspace?.name || "Blackframe"}
+                </h1>
+                {currentRole && (
+                  <p className="text-[11px] text-muted font-medium truncate">
+                    {currentRole.charAt(0).toUpperCase() + currentRole.slice(1)}
+                  </p>
+                )}
+              </div>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-muted transition-transform ${
+                  wsMenuOpen ? "rotate-180" : ""
+                }`}
+              />
+            </>
+          )}
         </button>
 
         {wsMenuOpen && (
@@ -158,18 +177,24 @@ export default function Sidebar({
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted bg-white border border-border hover:border-accent/30 transition-colors"
         >
           <Search className="w-3.5 h-3.5" />
-          <span className="text-[13px]">Search...</span>
-          <span className="ml-auto text-[10px] text-muted/60 border border-border rounded px-1.5 py-0.5">
-            ⌘K
-          </span>
+          {!collapsed && (
+            <>
+              <span className="text-[13px]">Search...</span>
+              <span className="ml-auto text-[10px] text-muted/60 border border-border rounded px-1.5 py-0.5">
+                ⌘K
+              </span>
+            </>
+          )}
         </button>
       </div>
 
       {/* Navigation */}
       <nav className="px-3 mt-3">
-        <p className="px-2 py-1.5 text-[11px] font-semibold text-muted/70 uppercase tracking-widest">
-          Navigate
-        </p>
+        {!collapsed && (
+          <p className="px-2 py-1.5 text-[11px] font-semibold text-muted/70 uppercase tracking-widest">
+            Navigate
+          </p>
+        )}
         {[
           { key: "dashboard", label: "Campaigns", icon: LayoutDashboard },
           { key: "assets", label: "All Assets", icon: FolderOpen },
@@ -189,17 +214,19 @@ export default function Sidebar({
                 : "text-slate-600 hover:text-foreground hover:bg-white"
             }`}
           >
-            <item.icon className="w-[18px] h-[18px]" />
-            {item.label}
+            <item.icon className="w-[18px] h-[18px] shrink-0" />
+            {!collapsed && item.label}
           </button>
         ))}
       </nav>
 
       {/* Folders */}
       <nav className="px-3 mt-5 flex-1 overflow-y-auto">
-        <p className="px-2 py-1.5 text-[11px] font-semibold text-muted/70 uppercase tracking-widest">
-          Folders
-        </p>
+        {!collapsed && (
+          <p className="px-2 py-1.5 text-[11px] font-semibold text-muted/70 uppercase tracking-widest">
+            Folders
+          </p>
+        )}
         {FOLDERS.map((folder) => {
           const Icon = iconMap[folder.icon] || FolderOpen;
           const isSelected =
@@ -215,18 +242,24 @@ export default function Sidebar({
                   : "text-slate-500 hover:text-foreground hover:bg-white"
               }`}
             >
-              <Icon className="w-[16px] h-[16px]" />
-              <span className="flex-1 text-left truncate">{folder.name}</span>
-              {count > 0 && (
-                <span
-                  className={`text-[11px] px-1.5 py-0.5 rounded-md ${
-                    isSelected
-                      ? "bg-accent/10 text-accent"
-                      : "bg-slate-100 text-slate-400"
-                  }`}
-                >
-                  {count}
-                </span>
+              <Icon className="w-[16px] h-[16px] shrink-0" />
+              {!collapsed && (
+                <>
+                  <span className="flex-1 text-left truncate">
+                    {folder.name}
+                  </span>
+                  {count > 0 && (
+                    <span
+                      className={`text-[11px] px-1.5 py-0.5 rounded-md ${
+                        isSelected
+                          ? "bg-accent/10 text-accent"
+                          : "bg-slate-100 text-slate-400"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </>
               )}
             </button>
           );
@@ -243,8 +276,8 @@ export default function Sidebar({
               : "text-slate-500 hover:text-foreground hover:bg-white"
           }`}
         >
-          <Share2 className="w-[16px] h-[16px]" />
-          Share Links
+          <Share2 className="w-[16px] h-[16px] shrink-0" />
+          {!collapsed && "Share Links"}
         </button>
         <button
           onClick={() => onNavigate("team")}
@@ -254,8 +287,8 @@ export default function Sidebar({
               : "text-slate-500 hover:text-foreground hover:bg-white"
           }`}
         >
-          <Users className="w-[16px] h-[16px]" />
-          Team
+          <Users className="w-[16px] h-[16px] shrink-0" />
+          {!collapsed && "Team"}
         </button>
         <button
           onClick={() => onNavigate("activity")}
@@ -265,8 +298,23 @@ export default function Sidebar({
               : "text-slate-500 hover:text-foreground hover:bg-white"
           }`}
         >
-          <Activity className="w-[16px] h-[16px]" />
-          Activity
+          <Activity className="w-[16px] h-[16px] shrink-0" />
+          {!collapsed && "Activity"}
+        </button>
+        {/* Collapse toggle ("claps") */}
+        <button
+          onClick={toggleCollapsed}
+          title={collapsed ? "Extinde meniul" : "Restrânge meniul"}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-slate-500 hover:text-foreground hover:bg-white transition-all"
+        >
+          {collapsed ? (
+            <PanelLeftOpen className="w-[16px] h-[16px] shrink-0" />
+          ) : (
+            <>
+              <PanelLeftClose className="w-[16px] h-[16px] shrink-0" />
+              Restrânge
+            </>
+          )}
         </button>
       </div>
 
@@ -280,28 +328,33 @@ export default function Sidebar({
                 ? currentMember.color
                 : "linear-gradient(to bottom right, var(--accent), #8b5cf6)",
             }}
+            title={profile?.displayName || "User"}
           >
             {initials}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-foreground truncate">
-              {profile?.displayName || "User"}
-            </p>
-            <p className="text-[11px] text-muted truncate">
-              {currentMember?.actorType
-                ? `${ACTOR_TYPE_LABELS[currentMember.actorType]}${
-                    currentMember.craft ? ` · ${currentMember.craft}` : ""
-                  }`
-                : profile?.email}
-            </p>
-          </div>
-          <button
-            onClick={signOut}
-            title="Sign out"
-            className="p-1.5 rounded-lg text-muted hover:text-red-500 hover:bg-white transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          {!collapsed && (
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold text-foreground truncate">
+                  {profile?.displayName || "User"}
+                </p>
+                <p className="text-[11px] text-muted truncate">
+                  {currentMember?.actorType
+                    ? `${ACTOR_TYPE_LABELS[currentMember.actorType]}${
+                        currentMember.craft ? ` · ${currentMember.craft}` : ""
+                      }`
+                    : profile?.email}
+                </p>
+              </div>
+              <button
+                onClick={signOut}
+                title="Sign out"
+                className="p-1.5 rounded-lg text-muted hover:text-red-500 hover:bg-white transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </>
+          )}
         </div>
       </div>
     </aside>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, CalendarDays, StickyNote } from "lucide-react";
 import Sidebar, { type View } from "@/components/Sidebar";
 import CampaignDashboard from "@/components/CampaignDashboard";
 import AssetBrowser from "@/components/AssetBrowser";
@@ -17,6 +17,9 @@ import ShareLinksView from "@/components/ShareLinksView";
 import NotificationsBell from "@/components/NotificationsBell";
 import GlobalSearch from "@/components/GlobalSearch";
 import { ContextPicker } from "@/components/ContextPicker";
+import ChatLayer from "@/components/ChatLayer";
+import CalendarView from "@/components/CalendarView";
+import NotesPanel from "@/components/NotesPanel";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
 
@@ -38,6 +41,8 @@ export default function Home() {
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [openCollection, setOpenCollection] = useState<Collection | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -131,9 +136,26 @@ export default function Home() {
         onOpenSearch={() => setSearchOpen(true)}
       />
 
-      <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar with notifications */}
-        <div className="absolute top-3 right-4 z-20">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        {/* Involved-threads bar + corner chat (Blackframe P3) */}
+        <ChatLayer />
+
+        {/* Top-right: calendar, utilities, notifications */}
+        <div className="absolute top-10 right-4 z-20 flex items-center gap-1">
+          <button
+            onClick={() => setCalendarOpen(true)}
+            title="Calendar"
+            className="p-2 rounded-lg text-muted hover:text-foreground hover:bg-card-hover border border-border bg-card-bg transition-colors"
+          >
+            <CalendarDays className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setNotesOpen(true)}
+            title="Notițe (utilities)"
+            className="p-2 rounded-lg text-muted hover:text-foreground hover:bg-card-hover border border-border bg-card-bg transition-colors"
+          >
+            <StickyNote className="w-4 h-4" />
+          </button>
           <NotificationsBell />
         </div>
 
@@ -204,6 +226,9 @@ export default function Home() {
         onOpenCampaign={handleOpenCampaign}
         onOpenAsset={handleOpenAssetCross}
       />
+
+      {calendarOpen && <CalendarView onClose={() => setCalendarOpen(false)} />}
+      {notesOpen && <NotesPanel onClose={() => setNotesOpen(false)} />}
 
       {/* Blackframe P2: on first entry into a workspace, ask why you're here
           and what your craft is before showing the project. */}

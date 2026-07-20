@@ -366,6 +366,8 @@ export interface ActivityEntry {
 // NOTIFICATION (per-user inbox)
 // ============================================================================
 export type NotificationKind =
+  | "chat_message"
+  | "god_message"
   | "mention"
   | "assigned"
   | "review_requested"
@@ -389,6 +391,65 @@ export interface Notification {
   read: boolean;
   readAt?: Timestamp;
   createdAt: Timestamp;
+}
+
+// ============================================================================
+// CHAT (Blackframe P3) — /workspaces/{id}/threads/{threadId}/messages/{msgId}
+// ============================================================================
+// general = everyone in the workspace (WhatsApp-style small talk)
+// dm      = conversation started by @mentioning someone
+// god     = the member's confessional line to the superadmin (workspace owner)
+export type ChatThreadType = "general" | "dm" | "god";
+
+export interface ChatThread {
+  id: string;
+  workspaceId: string;
+  type: ChatThreadType;
+  title: string;
+  participants: string[]; // uids involved; empty for general (= everyone)
+  createdBy: string;
+  createdAt: Timestamp;
+  lastMessageAt?: Timestamp;
+  lastMessageText?: string;
+  lastMessageBy?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  threadId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar?: string;
+  text: string;
+  mentions: string[]; // uids @mentioned
+  attachments: { url: string; name: string; contentType?: string }[];
+  readBy: string[]; // uids who ticked it read (red until you're in here)
+  system?: boolean; // app-generated (error alerts, god greetings)
+  createdAt: Timestamp;
+}
+
+// ============================================================================
+// CALENDAR (Blackframe P5) — /workspaces/{id}/calendarEvents/{eventId}
+// ============================================================================
+export interface CalendarEvent {
+  id: string;
+  workspaceId: string;
+  uid: string;
+  userName: string;
+  color: string; // the member's identity color
+  label: string; // e.g. "edit"
+  startDate: string; // YYYY-MM-DD (all-day spans)
+  endDate: string; // inclusive
+  createdAt: Timestamp;
+}
+
+// ============================================================================
+// NOTES (Blackframe P5) — /workspaces/{id}/notes/{uid} — personal scratchpad
+// ============================================================================
+export interface UserNote {
+  uid: string;
+  text: string;
+  updatedAt: Timestamp;
 }
 
 // ============================================================================
