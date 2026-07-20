@@ -7,6 +7,8 @@ import {
   serverTimestamp,
   query,
   orderBy,
+  where,
+  limit,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -16,6 +18,21 @@ export function calendarEventsRef(workspaceId: string) {
 
 export function calendarEventsQuery(workspaceId: string) {
   return query(calendarEventsRef(workspaceId), orderBy("startDate", "asc"));
+}
+
+// Only spans that can intersect the displayed month — the full-history query
+// doesn't survive a year of production planning. (Firestore allows one range
+// field, so the endDate side is filtered by the caller.)
+export function calendarEventsMonthQuery(
+  workspaceId: string,
+  monthEnd: string
+) {
+  return query(
+    calendarEventsRef(workspaceId),
+    where("startDate", "<=", monthEnd),
+    orderBy("startDate", "desc"),
+    limit(300)
+  );
 }
 
 export interface CreateCalendarEventInput {

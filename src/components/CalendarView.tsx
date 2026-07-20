@@ -6,10 +6,11 @@ import { ChevronLeft, ChevronRight, X, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
 import {
-  calendarEventsQuery,
+  calendarEventsMonthQuery,
   createCalendarEvent,
   deleteCalendarEvent,
 } from "@/lib/firestore/calendar";
+import { useCampaigns } from "@/hooks/useCampaigns";
 import type { CalendarEvent } from "@/lib/schema";
 
 const DAY_NAMES = ["Lu", "Ma", "Mi", "Jo", "Vi", "Sâ", "Du"];
@@ -43,18 +44,46 @@ export default function CalendarView({ onClose }: { onClose: () => void }) {
   const [selStart, setSelStart] = useState<string | null>(null);
   const [selEnd, setSelEnd] = useState<string | null>(null);
   const [label, setLabel] = useState("");
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   const wsId = activeWorkspace?.id ?? null;
+  const { campaigns } = useCampaigns(wsId);
+
+  // Bounds of the visible month, for the query + client-side endDate filter.
+  const monthStart = ymd(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
+  const monthEnd = ymd(
+    new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0)
+  );
 
   useEffect(() => {
     if (!wsId) return;
-    const unsub = onSnapshot(calendarEventsQuery(wsId), (snap) => {
-      setEvents(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() }) as CalendarEvent)
-      );
-    });
+    const unsub = onSnapshot(
+      calendarEventsMonthQuery(wsId, monthEnd),
+      (snap) => {
+        setEvents(
+          snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }) as CalendarEvent)
+            .filter((e) => e.endDate >= monthStart)
+        );
+      }
+    );
     return () => unsub();
-  }, [wsId]);
+  }, [wsId, monthStart, monthEnd]);
+
+  // Campaign deadlines painted as read-only markers.
+  const deadlines = useMemo(() => {
+    const map = new Map<string, string[]>();
+    campaigns.forEach((c) => {
+      if (!c.dueDate) return;
+      try {
+        const d = ymd(c.dueDate.toDate());
+        map.set(d, [...(map.get(d) ?? []), c.name]);
+      } catch {
+        /* ignore malformed */
+      }
+    });
+    return map;
+  }, [campaigns]);
 
   const days = useMemo(() => {
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
@@ -108,7 +137,8 @@ export default function CalendarView({ onClose }: { onClose: () => void }) {
   return (
     <div
       className="fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4"
-      onClick={onClose}
+      // don't throw away an in-progress selection on a stray backdrop click
+      onClick={() => !selStart && onClose()}
     >
       <div
         className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-card-bg border border-border rounded-2xl p-5"
@@ -221,37 +251,67 @@ export default function CalendarView({ onClose }: { onClose: () => void }) {
                 >
                   {d.getDate()}
                 </span>
+                {/* Campaign deadlines — read-only red markers */}
+                {deadlines.has(ds) && (
+                  <div
+                    className="mt-0.5 rounded px-1 py-0.5 text-[9px] font-bold text-red-300 border border-red-500/60 truncate"
+                    title={`Deadline: ${deadlines.get(ds)!.join(", ")}`}
+                  >
+                    ⏰ {deadlines.get(ds)!.join(", ")}
+                  </div>
+                )}
                 <div className="mt-0.5 space-y-0.5">
-                  {dayEvents.slice(0, 3).map((e) => (
-                    <div
-                      key={e.id}
-                      className="group flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-medium text-white truncate"
-                      style={{ background: e.color }}
-                      title={`${e.label} — ${e.userName} (${e.startDate} → ${e.endDate})`}
-                    >
-                      <span className="truncate">
-                        {ds === e.startDate
-                          ? `${e.label} · ${e.userName}`
-                          : e.label}
-                      </span>
-                      {e.uid === user.uid && (
-                        <span
-                          role="button"
-                          onClick={(ev) => {
-                            ev.stopPropagation();
-                            deleteCalendarEvent(wsId, e.id);
-                          }}
-                          className="hidden group-hover:block shrink-0"
-                        >
-                          <Trash2 className="w-2.5 h-2.5" />
+                  {(expandedDay === ds ? dayEvents : dayEvents.slice(0, 3)).map(
+                    (e) => (
+                      <div
+                        key={e.id}
+                        className="group flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-medium text-white truncate"
+                        style={{ background: e.color }}
+                        title={`${e.label} — ${e.userName} (${e.startDate} → ${e.endDate})`}
+                      >
+                        <span className="truncate">
+                          {ds === e.startDate
+                            ? `${e.label} · ${e.userName}`
+                            : e.label}
                         </span>
-                      )}
-                    </div>
-                  ))}
-                  {dayEvents.length > 3 && (
-                    <p className="text-[9px] text-muted">
-                      +{dayEvents.length - 3}
-                    </p>
+                        {e.uid === user.uid && (
+                          <span
+                            role="button"
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              deleteCalendarEvent(wsId, e.id);
+                            }}
+                            className="hidden group-hover:block shrink-0"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                          </span>
+                        )}
+                      </div>
+                    )
+                  )}
+                  {dayEvents.length > 3 && expandedDay !== ds && (
+                    <span
+                      role="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        setExpandedDay(ds);
+                      }}
+                      className="block text-[9px] font-semibold text-accent hover:underline"
+                    >
+                      +{dayEvents.length - 3} vezi tot
+                    </span>
+                  )}
+                  {expandedDay === ds && dayEvents.length > 3 && (
+                    <span
+                      role="button"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        setExpandedDay(null);
+                      }}
+                      className="block text-[9px] text-muted hover:underline"
+                    >
+                      restrânge
+                    </span>
                   )}
                 </div>
               </button>
