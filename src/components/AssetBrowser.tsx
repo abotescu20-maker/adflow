@@ -30,7 +30,6 @@ import { useAssets } from "@/hooks/useAssets";
 import { useCampaign } from "@/hooks/useCampaigns";
 import { useAuth } from "@/lib/auth-context";
 import {
-  deleteAsset,
   updateAssetStatus,
   setAssetTags,
   updateAsset,
@@ -78,7 +77,8 @@ function formatSize(bytes: number): string {
   if (!bytes) return "—";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
@@ -91,7 +91,9 @@ function formatDuration(seconds?: number): string | undefined {
 
 function formatDate(ts: Asset["createdAt"]): string {
   try {
-    return ts.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return ts
+      .toDate()
+      .toLocaleDateString("en-US", { month: "short", day: "numeric" });
   } catch {
     return "—";
   }
@@ -117,7 +119,11 @@ export default function AssetBrowser({
   const { user, profile } = useAuth();
   const toast = useToast();
   const { campaign } = useCampaign(workspaceId, campaignId);
-  const { assets, loading } = useAssets(workspaceId, campaignId, selectedFolder);
+  const { assets, loading } = useAssets(
+    workspaceId,
+    campaignId,
+    selectedFolder
+  );
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -148,20 +154,31 @@ export default function AssetBrowser({
         if (!blob || blob.size === 0) continue;
         const idToken = await user.getIdToken();
         const path = `workspaces/${workspaceId}/campaigns/${campaignId}/${a.folder}/thumbnails/backfill-${a.id}.jpg`;
-        const res = await upload(path, new File([blob], `thumb-${a.id}.jpg`, { type: "image/jpeg" }), {
-          access: "public",
-          handleUploadUrl: "/api/upload",
-          clientPayload: idToken,
+        const res = await upload(
+          path,
+          new File([blob], `thumb-${a.id}.jpg`, { type: "image/jpeg" }),
+          {
+            access: "public",
+            handleUploadUrl: "/api/upload",
+            clientPayload: idToken,
+          }
+        );
+        await updateAsset(workspaceId, campaignId, a.id, {
+          thumbnailURL: res.url,
         });
-        await updateAsset(workspaceId, campaignId, a.id, { thumbnailURL: res.url });
         done++;
       }
       toast.success(
         `Generated ${done} thumbnail${done !== 1 ? "s" : ""}`,
-        done < missingThumbs.length ? `${missingThumbs.length - done} could not be generated.` : undefined
+        done < missingThumbs.length
+          ? `${missingThumbs.length - done} could not be generated.`
+          : undefined
       );
     } catch {
-      toast.error("Thumbnail backfill failed", "Some thumbnails may not have generated.");
+      toast.error(
+        "Thumbnail backfill failed",
+        "Some thumbnails may not have generated."
+      );
     } finally {
       setBackfilling(false);
     }
@@ -181,7 +198,8 @@ export default function AssetBrowser({
   // Filtered assets
   const visibleAssets = useMemo(() => {
     return assets.filter((a) => {
-      if (statusFilter.length > 0 && !statusFilter.includes(a.status)) return false;
+      if (statusFilter.length > 0 && !statusFilter.includes(a.status))
+        return false;
       if (tagFilter && !(a.tags || []).includes(tagFilter)) return false;
       return true;
     });
@@ -222,7 +240,13 @@ export default function AssetBrowser({
     setWorking(true);
     try {
       for (const a of selectedAssets) {
-        await updateAssetStatus(workspaceId, campaignId, a.id, status, user.uid);
+        await updateAssetStatus(
+          workspaceId,
+          campaignId,
+          a.id,
+          status,
+          user.uid
+        );
         await logActivity(workspaceId, {
           actorId: user.uid,
           actorName: profile.displayName,
@@ -280,8 +304,26 @@ export default function AssetBrowser({
       return;
     setWorking(true);
     try {
+      // Cascade delete via the server route — client deleteDoc left comments/
+      // versions/rounds orphaned under the deleted asset (#34).
+      const idToken = await user.getIdToken();
       for (const a of selectedAssets) {
-        await deleteAsset(workspaceId, campaignId, a.id);
+        const res = await fetch("/api/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            idToken,
+            workspaceId,
+            campaignId,
+            assetId: a.id,
+          }),
+        });
+        if (!res.ok) {
+          const err = (await res.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(err?.error || "Delete failed");
+        }
         await logActivity(workspaceId, {
           actorId: user.uid,
           actorName: profile.displayName,
@@ -295,7 +337,11 @@ export default function AssetBrowser({
           assetName: a.name,
         });
       }
-      await decrementCampaignAssetsCount(workspaceId, campaignId, selected.size);
+      await decrementCampaignAssetsCount(
+        workspaceId,
+        campaignId,
+        selected.size
+      );
       const n = selected.size;
       clearSelection();
       toast.success(
@@ -351,7 +397,9 @@ export default function AssetBrowser({
             {currentFolder && (
               <>
                 <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
-                <span className="font-semibold text-foreground">{currentFolder.name}</span>
+                <span className="font-semibold text-foreground">
+                  {currentFolder.name}
+                </span>
               </>
             )}
           </div>
@@ -360,7 +408,9 @@ export default function AssetBrowser({
               <button
                 onClick={() => setViewMode("grid")}
                 className={`p-2 transition-colors ${
-                  viewMode === "grid" ? "bg-accent text-white" : "text-muted hover:text-foreground"
+                  viewMode === "grid"
+                    ? "bg-accent text-white"
+                    : "text-muted hover:text-foreground"
                 }`}
               >
                 <LayoutGrid className="w-4 h-4" />
@@ -368,7 +418,9 @@ export default function AssetBrowser({
               <button
                 onClick={() => setViewMode("list")}
                 className={`p-2 transition-colors ${
-                  viewMode === "list" ? "bg-accent text-white" : "text-muted hover:text-foreground"
+                  viewMode === "list"
+                    ? "bg-accent text-white"
+                    : "text-muted hover:text-foreground"
                 }`}
               >
                 <List className="w-4 h-4" />
@@ -409,7 +461,9 @@ export default function AssetBrowser({
                 ) : (
                   <ImageIcon className="w-3.5 h-3.5" />
                 )}
-                {backfilling ? "Generating…" : `Thumbnails (${missingThumbs.length})`}
+                {backfilling
+                  ? "Generating…"
+                  : `Thumbnails (${missingThumbs.length})`}
               </button>
             )}
             <button
@@ -437,7 +491,9 @@ export default function AssetBrowser({
                       key={s}
                       onClick={() =>
                         setStatusFilter((cur) =>
-                          cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]
+                          cur.includes(s)
+                            ? cur.filter((x) => x !== s)
+                            : [...cur, s]
                         )
                       }
                       className={`text-[11px] font-medium px-2.5 py-1 rounded-md border transition-colors capitalize ${
@@ -528,7 +584,9 @@ export default function AssetBrowser({
             ) : (
               <Square className="w-3.5 h-3.5" />
             )}
-            {selected.size === visibleAssets.length ? "Deselect all" : "Select all"}
+            {selected.size === visibleAssets.length
+              ? "Deselect all"
+              : "Select all"}
           </button>
         )}
       </div>
@@ -575,9 +633,15 @@ export default function AssetBrowser({
                 <div
                   key={asset.id}
                   className={`group bg-white rounded-xl border hover:shadow-lg transition-all overflow-hidden shadow-sm relative cursor-pointer ${
-                    isSelected ? "border-accent ring-2 ring-accent/30" : "border-border hover:border-accent/30"
+                    isSelected
+                      ? "border-accent ring-2 ring-accent/30"
+                      : "border-border hover:border-accent/30"
                   }`}
-                  onClick={() => (selected.size > 0 ? toggleSelect(asset.id) : onAssetOpen(asset.id))}
+                  onClick={() =>
+                    selected.size > 0
+                      ? toggleSelect(asset.id)
+                      : onAssetOpen(asset.id)
+                  }
                 >
                   {/* Select checkbox */}
                   <button
@@ -598,7 +662,11 @@ export default function AssetBrowser({
                   <div className="aspect-video bg-slate-50 relative flex items-center justify-center">
                     {asset.thumbnailURL ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={asset.thumbnailURL} alt="" className="w-full h-full object-cover" />
+                      <img
+                        src={asset.thumbnailURL}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
                     ) : asset.type === "image" && asset.downloadURL ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -607,7 +675,9 @@ export default function AssetBrowser({
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colors.bg}`}>
+                      <div
+                        className={`w-12 h-12 rounded-xl flex items-center justify-center ${colors.bg}`}
+                      >
                         <Icon className={`w-6 h-6 ${colors.icon}`} />
                       </div>
                     )}
@@ -661,7 +731,8 @@ export default function AssetBrowser({
             <div className="grid grid-cols-12 gap-2 px-4 py-2.5 text-[11px] text-muted uppercase tracking-wider font-semibold border-b border-border bg-slate-50">
               <div className="col-span-1 flex items-center">
                 <button onClick={selectAll} className="p-0.5">
-                  {selected.size === visibleAssets.length && visibleAssets.length > 0 ? (
+                  {selected.size === visibleAssets.length &&
+                  visibleAssets.length > 0 ? (
                     <CheckSquare className="w-4 h-4 text-accent" />
                   ) : (
                     <Square className="w-4 h-4 text-muted" />
@@ -684,12 +755,21 @@ export default function AssetBrowser({
                 <div
                   key={asset.id}
                   className={`grid grid-cols-12 gap-2 px-4 py-3 text-sm transition-colors items-center cursor-pointer border-b border-border/50 last:border-0 ${
-                    isSelected ? "bg-accent-light/70" : "hover:bg-accent-light/30"
+                    isSelected
+                      ? "bg-accent-light/70"
+                      : "hover:bg-accent-light/30"
                   }`}
-                  onClick={() => (selected.size > 0 ? toggleSelect(asset.id) : onAssetOpen(asset.id))}
+                  onClick={() =>
+                    selected.size > 0
+                      ? toggleSelect(asset.id)
+                      : onAssetOpen(asset.id)
+                  }
                 >
                   <div className="col-span-1">
-                    <button onClick={(e) => toggleSelect(asset.id, e)} className="p-0.5">
+                    <button
+                      onClick={(e) => toggleSelect(asset.id, e)}
+                      className="p-0.5"
+                    >
                       {isSelected ? (
                         <CheckSquare className="w-4 h-4 text-accent" />
                       ) : (
@@ -698,11 +778,15 @@ export default function AssetBrowser({
                     </button>
                   </div>
                   <div className="col-span-3 flex items-center gap-2.5 min-w-0">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${colors.bg}`}>
+                    <div
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${colors.bg}`}
+                    >
                       <Icon className={`w-4 h-4 ${colors.icon}`} />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-foreground truncate">{asset.name}</p>
+                      <p className="text-xs font-semibold text-foreground truncate">
+                        {asset.name}
+                      </p>
                       {(asset.tags || []).length > 0 && (
                         <p className="text-[10px] text-muted truncate">
                           {(asset.tags || []).slice(0, 4).join(", ")}
@@ -710,12 +794,18 @@ export default function AssetBrowser({
                       )}
                     </div>
                   </div>
-                  <div className="col-span-1 text-xs text-muted capitalize">{asset.type}</div>
+                  <div className="col-span-1 text-xs text-muted capitalize">
+                    {asset.type}
+                  </div>
                   <div className="col-span-2">
                     <StatusBadge status={asset.status} />
                   </div>
-                  <div className="col-span-1 text-xs font-medium text-muted">V{asset.version}</div>
-                  <div className="col-span-1 text-xs text-muted">{formatSize(asset.sizeBytes)}</div>
+                  <div className="col-span-1 text-xs font-medium text-muted">
+                    V{asset.version}
+                  </div>
+                  <div className="col-span-1 text-xs text-muted">
+                    {formatSize(asset.sizeBytes)}
+                  </div>
                   <div className="col-span-2 text-xs text-muted truncate">
                     {asset.uploadedByName} · {formatDate(asset.createdAt)}
                   </div>
@@ -777,7 +867,9 @@ function BulkBar({
   return (
     <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30 bg-white rounded-xl border border-border shadow-2xl shadow-foreground/10 flex items-center gap-1 px-2 py-1.5">
       <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-foreground">
-        <span className="bg-accent text-white rounded-md px-1.5 py-0.5 text-[11px]">{count}</span>
+        <span className="bg-accent text-white rounded-md px-1.5 py-0.5 text-[11px]">
+          {count}
+        </span>
         selected
       </div>
       <div className="w-px h-5 bg-border mx-1" />
@@ -861,7 +953,11 @@ function BulkBar({
         disabled={working}
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
       >
-        {working ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+        {working ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <Trash2 className="w-3.5 h-3.5" />
+        )}
         Delete
       </button>
 
