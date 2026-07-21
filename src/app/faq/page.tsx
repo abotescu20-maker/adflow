@@ -80,15 +80,51 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
     ),
   },
   {
-    q: "La ce folosesc rolul și culoarea de la prima logare?",
+    q: "Ce culoare am și de unde vine?",
     a: (
       <>
-        Rolul (client / agenție / casă de producție / post-producție + meseria)
-        spune ce faci în lanț — pe el se rutează feedbackul către oamenii
-        interesați. Culoarea e identitatea ta în <b>calendar</b> și chat. În
-        calendar (butonul din dreapta-sus): click pe ziua de start, click pe
-        final, scrii ce faci („edit") → perioada apare pe culoarea ta, iar
+        Culoarea <b>nu se alege — vine automat cu departamentul</b> ales la
+        prima logare: client <b style={{ color: "#ef4444" }}>roșu</b>, agenție{" "}
+        <b style={{ color: "#3b82f6" }}>albastru</b>, producție{" "}
+        <b style={{ color: "#22c55e" }}>verde</b>, 2D{" "}
+        <b style={{ color: "#ec4899" }}>roz</b>, 3D{" "}
+        <b style={{ color: "#8b5cf6" }}>mov</b>, sunet{" "}
+        <b style={{ color: "#ff7a00" }}>portocaliu</b>, montaj{" "}
+        <b style={{ color: "#f59e0b" }}>chihlimbar</b>, color{" "}
+        <b style={{ color: "#06b6d4" }}>cyan</b>, regie{" "}
+        <b style={{ color: "#eab308" }}>galben</b>. Cu ea apari în bara de sus,
+        în chat și în <b>calendar</b> — unde dai click pe ziua de start, click
+        pe final, scrii ce faci („edit") și perioada apare pe culoarea ta;
         deadline-urile campaniilor apar cu ⏰.
+      </>
+    ),
+  },
+  {
+    q: "Ce scurtături are player-ul video?",
+    a: (
+      <>
+        <b>Spațiu</b> = play/pauză · <b>J / K / L</b> = derulare înapoi / pauză
+        / redare (apasă repetat J sau L ca să dublezi viteza, până la 8x) ·{" "}
+        <b>,</b> și <b>.</b> = un cadru înapoi / înainte · <b>← →</b> = ±5
+        secunde · <b>⌘K</b> = căutare globală. Timecode-ul e SMPTE
+        (oră:min:sec:cadru) — dacă materialul nu e pe 25fps, schimbă fps-ul din
+        selectorul de lângă butoanele de cadru; se salvează pe material, ca
+        toată lumea să calce aceleași cadre.
+      </>
+    ),
+  },
+  {
+    q: "Cum trimit clientului cut-ul la aprobat?",
+    a: (
+      <>
+        Din meniul stânga → <b>Share Links</b> → creezi un link pe campania sau
+        materialele dorite. Alegi permisiunile: <b>doar vizualizare</b> sau{" "}
+        <b>comentarii + aprobare</b> (și dacă are voie să descarce). Trimiți
+        link-ul — clientul <b>nu are nevoie de cont</b>: vede cut-ul, comentează
+        pe timecode și dă Approve / Request changes. Voi primiți notificare cu
+        feedback-ul, rutat către departamentul vizat, iar aprobarea reține exact
+        versiunea aprobată (v2, v3…). Dacă revoci link-ul, clientul pierde
+        instant accesul, inclusiv la video.
       </>
     ),
   },

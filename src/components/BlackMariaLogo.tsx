@@ -44,7 +44,7 @@ export function BlackMariaStrip({
   const cells = [0, 1, 2, 3, 4];
   return (
     <svg
-      viewBox="0 0 640 160"
+      viewBox="-2 0 644 160"
       className={className}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
