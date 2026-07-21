@@ -16,6 +16,7 @@ import {
   ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
+  HelpCircle,
   FolderKanban,
   Activity,
   Users,
@@ -301,6 +302,13 @@ export default function Sidebar({
           <Activity className="w-[16px] h-[16px] shrink-0" />
           {!collapsed && "Activity"}
         </button>
+        <a
+          href="/faq"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-slate-500 hover:text-foreground hover:bg-white transition-all"
+        >
+          <HelpCircle className="w-[16px] h-[16px] shrink-0" />
+          {!collapsed && "Întrebări (FAQ)"}
+        </a>
         {/* Collapse toggle ("claps") */}
         <button
           onClick={toggleCollapsed}
