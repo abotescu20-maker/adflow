@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, CalendarDays, StickyNote } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Sidebar, { type View } from "@/components/Sidebar";
 import CampaignDashboard from "@/components/CampaignDashboard";
 import AssetBrowser from "@/components/AssetBrowser";
@@ -155,21 +155,31 @@ export default function Home() {
         {/* Involved-threads bar + corner chat (Blackframe P3) */}
         <ChatLayer />
 
-        {/* Top-right: calendar, utilities, notifications */}
-        <div className="absolute top-10 right-4 z-20 flex items-center gap-1">
+        {/* Top-right (client mockup): DASHBOARD | CALENDAR | NOTES */}
+        <div className="absolute top-10 right-4 z-20 flex items-center gap-2 px-2 py-1 rounded-lg bg-card-bg/90 border border-border">
+          <button
+            onClick={() => handleNavigate("dashboard")}
+            className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${
+              view === "dashboard"
+                ? "text-foreground"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            Dashboard
+          </button>
+          <span className="text-muted/40 text-[10px]">|</span>
           <button
             onClick={() => setCalendarOpen(true)}
-            title="Calendar"
-            className="p-2 rounded-lg text-muted hover:text-foreground hover:bg-card-hover border border-border bg-card-bg transition-colors"
+            className="text-[10px] font-semibold uppercase tracking-widest text-muted hover:text-foreground transition-colors"
           >
-            <CalendarDays className="w-4 h-4" />
+            Calendar
           </button>
+          <span className="text-muted/40 text-[10px]">|</span>
           <button
             onClick={() => setNotesOpen(true)}
-            title="Notițe (utilities)"
-            className="p-2 rounded-lg text-muted hover:text-foreground hover:bg-card-hover border border-border bg-card-bg transition-colors"
+            className="text-[10px] font-semibold uppercase tracking-widest text-muted hover:text-foreground transition-colors"
           >
-            <StickyNote className="w-4 h-4" />
+            Notes
           </button>
           <NotificationsBell />
         </div>
