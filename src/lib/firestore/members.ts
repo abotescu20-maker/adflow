@@ -83,6 +83,16 @@ export interface MemberContextInput {
   color: string;
 }
 
+// Silent re-color when the department palette changes (colors are derived
+// from actorType/craft since 17.07, no longer user-picked).
+export async function updateMemberColor(
+  workspaceId: string,
+  uid: string,
+  color: string
+): Promise<void> {
+  await updateDoc(memberRef(workspaceId, uid), { color });
+}
+
 // Written by the login context picker: which house you're in + your craft +
 // your identity color. Orthogonal to the permission role.
 export async function setMemberContext(

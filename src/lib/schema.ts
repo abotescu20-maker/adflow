@@ -111,6 +111,43 @@ export const MEMBER_COLORS = [
   "#3b82f6",
 ] as const;
 
+// Client feedback 17.07: the colour is NOT chosen — it comes with the
+// department. producție=verde, client=roșu, agenție=albastru, 2D=roz,
+// 3D=mov, sunet=portocaliu neon, etc.
+export const CRAFT_COLORS: Record<string, string> = {
+  "2D": "#ec4899", // roz
+  "3D": "#8b5cf6", // mov
+  Sunet: "#ff7a00", // portocaliu neon
+  Montaj: "#f59e0b", // chihlimbar
+  Color: "#06b6d4", // cyan
+  AI: "#14b8a6", // teal
+  VFX: "#6366f1", // indigo
+  Motion: "#0ea5e9", // albastru deschis
+  Regie: "#eab308", // galben
+  Producție: "#22c55e", // verde
+};
+
+export const ACTOR_COLORS: Record<ActorType, string> = {
+  client: "#ef4444", // roșu
+  agency: "#3b82f6", // albastru
+  production_house: "#22c55e", // verde
+  post_production: "#a855f7", // mov
+};
+
+// The department decides the colour; a custom craft gets a stable colour
+// hashed from its name so two people on the same custom craft match.
+export function departmentColor(
+  actorType: ActorType,
+  craft?: string | null
+): string {
+  if (craft) {
+    if (CRAFT_COLORS[craft]) return CRAFT_COLORS[craft];
+    const sum = craft.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+    return MEMBER_COLORS[sum % MEMBER_COLORS.length];
+  }
+  return ACTOR_COLORS[actorType];
+}
+
 export interface WorkspaceMember {
   uid: string;
   email: string;

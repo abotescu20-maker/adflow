@@ -33,6 +33,58 @@ export function BlackMariaMark({
   );
 }
 
+// The horizontal film-strip mark the client sent on 17.07: five circles cut by
+// vertical lines inside a rectangular strip (like sprocketed film). Used where
+// there's horizontal room (login, FAQ, wide headers).
+export function BlackMariaStrip({
+  className = "h-8 w-auto",
+}: {
+  className?: string;
+}) {
+  const cells = [0, 1, 2, 3, 4];
+  return (
+    <svg
+      viewBox="0 0 640 160"
+      className={className}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      {/* strip frame — starts/ends mid-circle, like the client's mark */}
+      <rect
+        x="60"
+        y="16"
+        width="520"
+        height="128"
+        stroke="currentColor"
+        strokeWidth="10"
+      />
+      {cells.map((i) => {
+        const cx = 60 + i * 130;
+        return (
+          <g key={i}>
+            <circle
+              cx={cx}
+              cy="80"
+              r="56"
+              stroke="currentColor"
+              strokeWidth="10"
+            />
+            <line
+              x1={cx}
+              y1="8"
+              x2={cx}
+              y2="152"
+              stroke="currentColor"
+              strokeWidth="10"
+            />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 // The logo is clickable → opens Stefan's easter-egg. Until the client provides the
 // actual video, we show the line as text (swap `videoUrl` when the file exists).
 export function LogoButton({

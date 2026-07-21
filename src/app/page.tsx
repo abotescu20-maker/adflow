@@ -22,6 +22,8 @@ import CalendarView from "@/components/CalendarView";
 import NotesPanel from "@/components/NotesPanel";
 import { useAuth } from "@/lib/auth-context";
 import { useWorkspace } from "@/lib/workspace-context";
+import { updateMemberColor } from "@/lib/firestore/members";
+import { departmentColor } from "@/lib/schema";
 
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
@@ -54,6 +56,19 @@ export default function Home() {
       router.replace("/onboarding");
     }
   }, [user, authLoading, workspaces, wsLoading, router]);
+
+  // Colors are derived from the department (client feedback 17.07). Members
+  // who picked a color before the change get silently realigned on open.
+  useEffect(() => {
+    if (!user || !activeWorkspace || !currentMember?.actorType) return;
+    const should = departmentColor(
+      currentMember.actorType,
+      currentMember.craft
+    );
+    if (currentMember.color !== should) {
+      updateMemberColor(activeWorkspace.id, user.uid, should).catch(() => {});
+    }
+  }, [user, activeWorkspace, currentMember]);
 
   // Deep-link: open a specific asset from a notification link (/?campaign=..&asset=..)
   useEffect(() => {

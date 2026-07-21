@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { BlackMariaMark } from "@/components/BlackMariaLogo";
+import { BlackMariaStrip } from "@/components/BlackMariaLogo";
 
 function LoginForm() {
   const { user, loading, signIn, signInWithGoogle } = useAuth();
@@ -49,11 +49,13 @@ function LoginForm() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-subtle/30 px-4">
       <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-3 mb-8">
+        <div className="flex flex-col items-center gap-3 mb-8">
           <span className="text-foreground">
-            <BlackMariaMark className="w-11 h-11" />
+            <BlackMariaStrip className="h-9 w-auto" />
           </span>
-          <h1 className="text-lg font-bold tracking-tight">Blackframe</h1>
+          <h1 className="text-lg font-bold tracking-[0.3em] uppercase">
+            Blackframe
+          </h1>
         </div>
 
         <div className="bg-white rounded-2xl border border-border shadow-sm p-7">

@@ -9,7 +9,7 @@ import {
   ActorType,
   ACTOR_TYPE_LABELS,
   DEFAULT_CRAFTS,
-  MEMBER_COLORS,
+  departmentColor,
 } from "@/lib/schema";
 import { BlackMariaMark } from "@/components/BlackMariaLogo";
 
@@ -32,11 +32,6 @@ function needsCraft(actor: ActorType | null): boolean {
   return actor === "production_house" || actor === "post_production";
 }
 
-function colorForUid(uid: string): string {
-  const sum = uid.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  return MEMBER_COLORS[sum % MEMBER_COLORS.length];
-}
-
 // The "why are you here + your role" picker (Blackframe P2). Rendered by the
 // dashboard when the active membership has no production context yet. Writing
 // the context updates the member doc; the realtime listener then hides this.
@@ -46,25 +41,26 @@ export function ContextPicker() {
   const [actor, setActor] = useState<ActorType | null>(null);
   const [craft, setCraft] = useState<string | null>(null);
   const [customCraft, setCustomCraft] = useState("");
-  const [color, setColor] = useState<string>(
-    user ? colorForUid(user.uid) : MEMBER_COLORS[0]
-  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!user || !activeWorkspace) return null;
 
   const canSave = actor !== null && (!needsCraft(actor) || !!craft);
+  // Client feedback: the colour comes WITH the department, not from a picker.
+  const autoColor = actor
+    ? departmentColor(actor, needsCraft(actor) ? craft : null)
+    : null;
 
   const handleSave = async () => {
-    if (!actor) return;
+    if (!actor || !autoColor) return;
     setBusy(true);
     setError(null);
     try {
       await setMemberContext(activeWorkspace.id, user.uid, {
         actorType: actor,
         craft: needsCraft(actor) ? craft : null,
-        color,
+        color: autoColor,
       });
       // The workspace listener will pick up the change and unmount us.
     } catch (err) {
@@ -174,27 +170,18 @@ export function ContextPicker() {
           </div>
         )}
 
-        {/* Identity color */}
-        <div className="mb-6">
-          <p className="text-[12px] font-medium text-foreground mb-2">
-            Culoarea ta (calendar & chat)
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {MEMBER_COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => setColor(c)}
-                aria-label={`Culoare ${c}`}
-                className={`w-7 h-7 rounded-full transition-transform ${
-                  color === c
-                    ? "ring-2 ring-offset-2 ring-offset-card-bg ring-foreground scale-110"
-                    : "hover:scale-105"
-                }`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
+        {/* Department colour — automatic, not chosen */}
+        {autoColor && (
+          <div className="mb-6 flex items-center gap-2.5">
+            <span
+              className="w-7 h-7 rounded-full shrink-0 ring-2 ring-offset-2 ring-offset-card-bg ring-foreground/30"
+              style={{ backgroundColor: autoColor }}
+            />
+            <p className="text-[12px] text-muted">
+              Culoarea departamentului tău — te identifică în calendar și chat.
+            </p>
           </div>
-        </div>
+        )}
 
         {error && <p className="text-[12px] text-red-400 mb-3">{error}</p>}
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ArrowLeft } from "lucide-react";
-import { BlackMariaMark } from "@/components/BlackMariaLogo";
+import { BlackMariaStrip } from "@/components/BlackMariaLogo";
 
 // FAQ-ul echipei (cerut după primul test live, 17.07.2026): întrebările reale
 // din grupul de WhatsApp, cu răspunsurile canonice. Public — nu cere cont.
@@ -118,9 +118,9 @@ export default function FaqPage() {
   return (
     <div className="min-h-screen bg-subtle/30 px-4 py-10">
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <span className="text-foreground shrink-0">
-            <BlackMariaMark className="w-10 h-10" />
+        <div className="flex flex-col items-center gap-3 mb-8 text-center">
+          <span className="text-foreground">
+            <BlackMariaStrip className="h-8 w-auto" />
           </span>
           <div>
             <h1 className="text-lg font-bold tracking-tight">
