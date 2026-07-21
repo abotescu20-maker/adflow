@@ -35,7 +35,12 @@ export async function GET(
       .get();
     if (!assetSnap.exists) throw new ShareAuthError("Asset not found", 404);
     const a = assetSnap.data() ?? {};
-    const blobUrl = (a.downloadURL ?? a.storagePath) as string | undefined;
+    // ?thumb=1 serves the poster frame through the same gate — a raw public
+    // thumbnail URL leaks a frame of the content, revocation-proof.
+    const wantThumb = new URL(request.url).searchParams.get("thumb") === "1";
+    const blobUrl = (
+      wantThumb ? a.thumbnailURL : (a.downloadURL ?? a.storagePath)
+    ) as string | undefined;
     if (!blobUrl || !/^https?:\/\//.test(blobUrl)) {
       throw new ShareAuthError("Media unavailable", 404);
     }

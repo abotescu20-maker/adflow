@@ -7,13 +7,16 @@ import { adminDb } from "@/lib/firebase-admin";
 // folder, plus the uploader and the workspace owner, get a notification.
 // (The email leg comes later; this is the delivery channel that exists today.)
 
-// folder → crafts that care about it (matches DEFAULT_CRAFTS labels)
+// folder → crafts that care about it. Every label here MUST exist in
+// DEFAULT_CRAFTS (schema.ts) — a router that routes to labels nobody can pick
+// is dead code.
 const FOLDER_CRAFTS: Record<string, string[]> = {
   graphics: ["2D", "3D", "Motion", "VFX", "AI"],
   sound: ["Sunet"],
-  edits: ["Montaj", "Edit", "Regie"],
+  edits: ["Montaj", "Regie"],
   final: ["Color", "Montaj", "Producție"],
   footage: ["Producție", "Regie"],
+  briefs: ["Producție", "Regie"],
 };
 
 export interface GuestFeedbackEvent {

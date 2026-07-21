@@ -23,7 +23,9 @@ function serializeAsset(d: DocumentSnapshot, token: string) {
     status: a.status ?? null,
     downloadURL: hasMedia ? `/api/share/${token}/media/${d.id}` : null,
     storagePath: null,
-    thumbnailURL: a.thumbnailURL ?? null,
+    thumbnailURL: a.thumbnailURL
+      ? `/api/share/${token}/media/${d.id}?thumb=1`
+      : null,
     originalFileName: a.originalFileName ?? null,
     width: a.width ?? null,
     height: a.height ?? null,
@@ -82,7 +84,11 @@ export async function GET(
           .filter((d) => d.exists)
           .map((d) => serializeAsset(d, token));
       } else {
-        const snap = await assetsCol.orderBy("createdAt", "desc").get();
+        // bounded — a campaign-wide share must not pull an unbounded set
+        const snap = await assetsCol
+          .orderBy("createdAt", "desc")
+          .limit(100)
+          .get();
         assets = snap.docs.map((d) => serializeAsset(d, token));
       }
     }

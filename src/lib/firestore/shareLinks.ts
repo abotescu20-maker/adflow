@@ -39,11 +39,13 @@ export interface CreateShareLinkInput {
   assetIds?: string[];
   permissions: ShareLink["permissions"];
   expiresAt?: Date;
-  allowedEmails?: string[];
-  allowedDomains?: string[];
   createdBy: string;
 }
 
+// NOTE: no passwordHash / allowedEmails / allowedDomains here. Those fields
+// used to be written but were never enforced by resolveShare — a loaded gun:
+// anyone wiring a UI to them would ship the ILLUSION of a restricted link.
+// Add them only together with the enforcement in share-server.ts.
 export async function createShareLink(
   workspaceId: string,
   input: CreateShareLinkInput
@@ -57,10 +59,7 @@ export async function createShareLink(
     token,
     name: input.name,
     permissions: input.permissions,
-    passwordHash: null,
     expiresAt: input.expiresAt ?? null,
-    allowedEmails: input.allowedEmails ?? [],
-    allowedDomains: input.allowedDomains ?? [],
     createdBy: input.createdBy,
     createdAt: serverTimestamp(),
     viewCount: 0,

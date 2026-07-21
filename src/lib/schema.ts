@@ -520,10 +520,10 @@ export interface ShareLink {
     canApprove: boolean;
     canDownload: boolean;
   };
-  passwordHash?: string;
   expiresAt?: Timestamp;
-  allowedEmails?: string[]; // email whitelist
-  allowedDomains?: string[]; // domain whitelist
+  // Deliberately NO passwordHash/allowedEmails/allowedDomains: they were
+  // stored but never enforced (security theater). Reintroduce only together
+  // with enforcement in resolveShare.
   createdBy: string;
   createdAt: Timestamp;
   viewCount: number;
