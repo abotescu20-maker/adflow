@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
+import { sendEmail, feedbackEmailHtml } from "@/lib/email";
 
 // Server-side fan-out for guest feedback (Blackframe P4, in-app leg).
 // Client/agency feedback used to land silently in Firestore — nobody on the
@@ -52,10 +53,16 @@ export async function notifyTeamOfGuestFeedback(
   const crafts = FOLDER_CRAFTS[ev.assetFolder ?? ""] ?? [];
 
   const recipients = new Set<string>();
+  const emailByUid = new Map<string, string>();
   if (ownerUid) recipients.add(ownerUid);
   if (uploadedBy) recipients.add(uploadedBy);
   membersSnap.docs.forEach((d) => {
-    const m = d.data() as { uid?: string; craft?: string | null };
+    const m = d.data() as {
+      uid?: string;
+      craft?: string | null;
+      email?: string;
+    };
+    if (m.uid && m.email) emailByUid.set(m.uid, m.email);
     if (m.uid && m.craft && crafts.includes(m.craft)) recipients.add(m.uid);
   });
 
@@ -92,5 +99,27 @@ export async function notifyTeamOfGuestFeedback(
     });
   });
   await batch.commit();
+
+  // P4 email leg: the SAME craft-routed recipients also get an email. No-op
+  // until RESEND_API_KEY is configured; in-app notifications never depend on it.
+  const emails = [...recipients]
+    .map((uid) => emailByUid.get(uid))
+    .filter((e): e is string => !!e);
+  if (emails.length) {
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL || "https://adflow-theta-plum.vercel.app";
+    await sendEmail({
+      to: emails,
+      subject: `${titles[ev.kind]} · ${ev.assetName}`,
+      html: feedbackEmailHtml({
+        title: titles[ev.kind],
+        guestName: ev.guestName,
+        assetName: ev.assetName,
+        body: ev.preview,
+        linkUrl: `${appUrl}/?campaign=${ev.campaignId}&asset=${ev.assetId}`,
+      }),
+    });
+  }
+
   return recipients.size;
 }
