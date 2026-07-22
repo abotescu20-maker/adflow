@@ -152,37 +152,39 @@ export default function Home() {
       />
 
       <main className="flex-1 flex flex-col overflow-hidden relative">
-        {/* Involved-threads bar + corner chat (Blackframe P3) */}
-        <ChatLayer />
-
-        {/* Top-right (client mockup): DASHBOARD | CALENDAR | NOTES */}
-        <div className="absolute top-10 right-4 z-20 flex items-center gap-2 px-2 py-1 rounded-lg bg-card-bg/90 border border-border">
-          <button
-            onClick={() => handleNavigate("dashboard")}
-            className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${
-              view === "dashboard"
-                ? "text-foreground"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            Dashboard
-          </button>
-          <span className="text-muted/40 text-[10px]">|</span>
-          <button
-            onClick={() => setCalendarOpen(true)}
-            className="text-[10px] font-semibold uppercase tracking-widest text-muted hover:text-foreground transition-colors"
-          >
-            Calendar
-          </button>
-          <span className="text-muted/40 text-[10px]">|</span>
-          <button
-            onClick={() => setNotesOpen(true)}
-            className="text-[10px] font-semibold uppercase tracking-widest text-muted hover:text-foreground transition-colors"
-          >
-            Notes
-          </button>
-          <NotificationsBell />
-        </div>
+        {/* One top band (client mockup): users & messages left, nav right —
+            in flow, so it can never sit on top of page content. */}
+        <ChatLayer
+          rightSlot={
+            <>
+              <button
+                onClick={() => handleNavigate("dashboard")}
+                className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${
+                  view === "dashboard"
+                    ? "text-foreground"
+                    : "text-muted hover:text-foreground"
+                }`}
+              >
+                Dashboard
+              </button>
+              <span className="text-muted/40 text-[10px]">|</span>
+              <button
+                onClick={() => setCalendarOpen(true)}
+                className="text-[10px] font-semibold uppercase tracking-widest text-muted hover:text-foreground transition-colors"
+              >
+                Calendar
+              </button>
+              <span className="text-muted/40 text-[10px]">|</span>
+              <button
+                onClick={() => setNotesOpen(true)}
+                className="text-[10px] font-semibold uppercase tracking-widest text-muted hover:text-foreground transition-colors"
+              >
+                Notes
+              </button>
+              <NotificationsBell />
+            </>
+          }
+        />
 
         <div className="flex-1 overflow-hidden">
           {view === "dashboard" && (

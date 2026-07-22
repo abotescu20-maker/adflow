@@ -74,7 +74,13 @@ function renderText(text: string) {
   );
 }
 
-export default function ChatLayer() {
+// rightSlot: the DASHBOARD | CALENDAR | NOTES nav — it lives IN this bar (one
+// top band, per the client's mockup), never absolutely positioned over content.
+export default function ChatLayer({
+  rightSlot,
+}: {
+  rightSlot?: React.ReactNode;
+}) {
   const { user, profile } = useAuth();
   const { activeWorkspace, currentMember } = useWorkspace();
   const { members } = useMembers(activeWorkspace?.id ?? null);
@@ -365,68 +371,77 @@ export default function ChatLayer() {
     <>
       {/* ── Top bar (client mockup: "USERS & MESSAGES") — every member is a
              tab in their department colour; click opens the conversation ── */}
-      <div className="flex items-center gap-1 px-4 py-1.5 border-b border-border bg-sidebar-bg overflow-x-auto shrink-0">
-        <MessageCircle className="w-3.5 h-3.5 text-muted shrink-0 mr-1" />
-        {generalThread && (
-          <button
-            onClick={() => openThread(GENERAL_THREAD_ID)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide border-r border-border shrink-0 transition-colors ${
-              activeThreadId === GENERAL_THREAD_ID && open
-                ? "text-foreground"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            {hasNewDot(generalThread) && (
-              <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
-            )}
-            General
-          </button>
-        )}
-        {members
-          .filter((m) => m.uid !== myUid)
-          .map((m) => {
-            const dm = threads.find((t) => t.id === dmThreadId(myUid, m.uid));
-            const active = open && activeThreadId === dmThreadId(myUid, m.uid);
-            return (
-              <button
-                key={m.uid}
-                onClick={async () => {
-                  const id = await ensureDmThread(wsId, { uid: myUid }, m);
-                  openThread(id);
-                }}
-                title={`${m.displayName}${m.craft ? ` · ${m.craft}` : ""}`}
-                className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold border-r border-border shrink-0 transition-opacity ${
-                  active ? "opacity-100" : "opacity-75 hover:opacity-100"
-                }`}
-                style={{ color: m.color || "var(--muted)" }}
-              >
-                {dm && hasNewDot(dm) && (
-                  <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
-                )}
-                {m.displayName.split(" ")[0]}
-              </button>
-            );
-          })}
-        {/* non-DM threads you're involved in (god, mentions) */}
-        {barThreads
-          .filter((t) => t.id !== GENERAL_THREAD_ID && t.type !== "dm")
-          .map((t) => (
+      <div className="flex items-center h-10 px-4 border-b border-border bg-sidebar-bg shrink-0">
+        {/* scrollable tabs; the nav on the right never scrolls away */}
+        <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
+          <MessageCircle className="w-3.5 h-3.5 text-muted shrink-0 mr-1" />
+          {generalThread && (
             <button
-              key={t.id}
-              onClick={() => openThread(t.id)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium shrink-0 transition-colors ${
-                activeThreadId === t.id && open
-                  ? "text-accent"
+              onClick={() => openThread(GENERAL_THREAD_ID)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide border-r border-border shrink-0 transition-colors ${
+                activeThreadId === GENERAL_THREAD_ID && open
+                  ? "text-foreground"
                   : "text-muted hover:text-foreground"
               }`}
             >
-              {hasNewDot(t) && (
+              {hasNewDot(generalThread) && (
                 <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
               )}
-              {t.type === "god" && <Sparkles className="w-3 h-3" />}
-              {threadTitle(t)}
+              General
             </button>
-          ))}
+          )}
+          {members
+            .filter((m) => m.uid !== myUid)
+            .map((m) => {
+              const dm = threads.find((t) => t.id === dmThreadId(myUid, m.uid));
+              const active =
+                open && activeThreadId === dmThreadId(myUid, m.uid);
+              return (
+                <button
+                  key={m.uid}
+                  onClick={async () => {
+                    const id = await ensureDmThread(wsId, { uid: myUid }, m);
+                    openThread(id);
+                  }}
+                  title={`${m.displayName}${m.craft ? ` · ${m.craft}` : ""}`}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold border-r border-border shrink-0 transition-opacity ${
+                    active ? "opacity-100" : "opacity-75 hover:opacity-100"
+                  }`}
+                  style={{ color: m.color || "var(--muted)" }}
+                >
+                  {dm && hasNewDot(dm) && (
+                    <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                  )}
+                  {m.displayName.split(" ")[0]}
+                </button>
+              );
+            })}
+          {/* non-DM threads you're involved in (god, mentions) */}
+          {barThreads
+            .filter((t) => t.id !== GENERAL_THREAD_ID && t.type !== "dm")
+            .map((t) => (
+              <button
+                key={t.id}
+                onClick={() => openThread(t.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium shrink-0 transition-colors ${
+                  activeThreadId === t.id && open
+                    ? "text-accent"
+                    : "text-muted hover:text-foreground"
+                }`}
+              >
+                {hasNewDot(t) && (
+                  <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                )}
+                {t.type === "god" && <Sparkles className="w-3 h-3" />}
+                {threadTitle(t)}
+              </button>
+            ))}
+        </div>
+        {rightSlot && (
+          <div className="flex items-center gap-2 shrink-0 pl-3 border-l border-border">
+            {rightSlot}
+          </div>
+        )}
       </div>
 
       {/* ── Corner chat (WhatsApp-style) ────────────────────────────────── */}
