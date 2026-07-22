@@ -108,17 +108,25 @@ export async function notifyTeamOfGuestFeedback(
   if (emails.length) {
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://adflow-theta-plum.vercel.app";
-    await sendEmail({
-      to: emails,
-      subject: `${titles[ev.kind]} · ${ev.assetName}`,
-      html: feedbackEmailHtml({
-        title: titles[ev.kind],
-        guestName: ev.guestName,
-        assetName: ev.assetName,
-        body: ev.preview,
-        linkUrl: `${appUrl}/?campaign=${ev.campaignId}&asset=${ev.assetId}`,
-      }),
+    const html = feedbackEmailHtml({
+      title: titles[ev.kind],
+      guestName: ev.guestName,
+      assetName: ev.assetName,
+      body: ev.preview,
+      linkUrl: `${appUrl}/?campaign=${ev.campaignId}&asset=${ev.assetId}`,
     });
+    // One send per recipient: Resend rejects a whole batch if ANY address is
+    // disallowed (pre-domain-verification only the account owner can receive),
+    // so batching would silence everyone because of one bad address.
+    await Promise.allSettled(
+      emails.slice(0, 20).map((to) =>
+        sendEmail({
+          to: [to],
+          subject: `${titles[ev.kind]} · ${ev.assetName}`,
+          html,
+        })
+      )
+    );
   }
 
   return recipients.size;
