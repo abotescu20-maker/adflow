@@ -70,6 +70,8 @@ export default function PublicSharePage({
   // all persisted server-side via /api/share/[token]/* (Firestore rules forbid
   // anonymous writes, so the trusted server tier does it after validating the token).
   const [guestName, setGuestName] = useState("");
+  // Routing key (P4): who is this note FOR — beats the folder heuristic.
+  const [targetCraft, setTargetCraft] = useState("");
   const [commentText, setCommentText] = useState("");
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<{
@@ -209,6 +211,7 @@ export default function PublicSharePage({
           text: commentText.trim(),
           guestName: guestName.trim(),
           timecode: tc,
+          targetCraft: targetCraft || undefined,
         }),
       });
       const data = await res.json();
@@ -352,12 +355,38 @@ export default function PublicSharePage({
                   </div>
                   {(share.permissions.canComment ||
                     share.permissions.canApprove) && (
-                    <input
-                      value={guestName}
-                      onChange={(e) => setGuestName(e.target.value)}
-                      placeholder="Your name"
-                      className="w-40 shrink-0 px-3 py-1.5 rounded-lg border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
-                    />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <select
+                        value={targetCraft}
+                        onChange={(e) => setTargetCraft(e.target.value)}
+                        title="Pentru cine e observația — ajunge direct la departamentul ales"
+                        className="px-2 py-1.5 rounded-lg border border-border text-xs bg-transparent focus:outline-none focus:ring-2 focus:ring-accent/40"
+                      >
+                        <option value="">Pentru: toată echipa</option>
+                        {[
+                          "Regie",
+                          "Montaj",
+                          "Color",
+                          "2D",
+                          "3D",
+                          "AI",
+                          "Sunet",
+                          "VFX",
+                          "Motion",
+                          "Producție",
+                        ].map((c) => (
+                          <option key={c} value={c}>
+                            Pentru: {c}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                        placeholder="Your name"
+                        className="w-40 px-3 py-1.5 rounded-lg border border-border text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
+                      />
+                    </div>
                   )}
                 </div>
 

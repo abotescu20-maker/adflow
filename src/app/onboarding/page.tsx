@@ -60,12 +60,26 @@ export default function OnboardingPage() {
           <h1 className="text-lg font-bold tracking-tight">Blackframe</h1>
         </div>
 
+        {/* The Mihai path: invited people must NOT create their own empty
+            workspace — that's how "I can't see the campaign" happens. */}
+        <div className="bg-accent-light border border-accent/40 rounded-2xl p-5 mb-4">
+          <h2 className="text-sm font-bold text-foreground mb-1">
+            Ai fost invitat într-o echipă?
+          </h2>
+          <p className="text-[13px] text-muted leading-relaxed">
+            Nu-ți crea un workspace nou — cere-i colegului{" "}
+            <b className="text-foreground">link-ul de invitație</b> (el îl
+            generează din Team → Invite member) și deschide-l logat cu contul
+            ăsta. Intri direct în workspace-ul echipei, cu toate campaniile.
+          </p>
+        </div>
+
         <div className="bg-white rounded-2xl border border-border shadow-sm p-7">
           <div className="w-12 h-12 rounded-xl bg-accent-light flex items-center justify-center mb-4">
             <Building2 className="w-6 h-6 text-accent" />
           </div>
           <h2 className="text-xl font-semibold text-foreground mb-1">
-            Create your workspace
+            Sau creează un workspace nou
           </h2>
           <p className="text-sm text-muted mb-6">
             A workspace is where your team collaborates on campaigns. You can

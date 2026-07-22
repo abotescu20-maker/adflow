@@ -29,6 +29,9 @@ export interface GuestFeedbackEvent {
   guestName: string;
   kind: "comment" | "approved" | "changes_requested";
   preview: string;
+  // When the reviewer says WHO the note is for ("Pentru: Color"), that beats
+  // the folder heuristic — this is the routing key P4 was designed around.
+  targetCraft?: string | null;
 }
 
 export async function notifyTeamOfGuestFeedback(
@@ -50,7 +53,9 @@ export async function notifyTeamOfGuestFeedback(
 
   const ownerUid = wsSnap.data()?.ownerUid as string | undefined;
   const uploadedBy = assetSnap.data()?.uploadedBy as string | undefined;
-  const crafts = FOLDER_CRAFTS[ev.assetFolder ?? ""] ?? [];
+  const crafts = ev.targetCraft
+    ? [ev.targetCraft]
+    : (FOLDER_CRAFTS[ev.assetFolder ?? ""] ?? []);
 
   const recipients = new Set<string>();
   const emailByUid = new Map<string, string>();

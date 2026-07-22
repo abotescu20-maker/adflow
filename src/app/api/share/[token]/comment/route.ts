@@ -28,12 +28,19 @@ export async function POST(
       text?: string;
       timecode?: number;
       guestName?: string;
+      guestEmail?: string;
+      targetCraft?: string;
     };
 
     const campaignId = assertAssetInShare(share, String(body.assetId ?? ""));
     const text = cleanText(body.text, 4000);
     if (!text) throw new ShareAuthError("Comment text is required", 400);
     const guestName = cleanText(body.guestName, 80) || "Guest reviewer";
+    // Optional identity + routing key from the reviewer.
+    const rawEmail = cleanText(body.guestEmail, 120);
+    const guestEmail =
+      rawEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : null;
+    const targetCraft = cleanText(body.targetCraft, 40) || null;
     const timecode =
       typeof body.timecode === "number" &&
       isFinite(body.timecode) &&
@@ -66,6 +73,8 @@ export async function POST(
       attachments: [],
       mentions: [],
       viaShareToken: token,
+      guestEmail,
+      targetCraft,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -82,7 +91,8 @@ export async function POST(
         assetFolder: assetData.folder as string | undefined,
         guestName,
         kind: "comment",
-        preview: text,
+        preview: targetCraft ? `[${targetCraft}] ${text}` : text,
+        targetCraft,
       });
     } catch (e) {
       console.error("guest-feedback fan-out failed:", e);
